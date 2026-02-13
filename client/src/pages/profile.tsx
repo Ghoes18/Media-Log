@@ -146,9 +146,9 @@ export default function Profile() {
   }, [handle, isMe]);
 
   return (
-    <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30">
+    <div className="min-h-dvh overflow-x-hidden bg-gradient-to-b from-background via-background to-muted/30">
       <header className="sticky top-0 z-30 border-b bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
-        <div className="mx-auto grid max-w-6xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 sm:flex sm:gap-3">
+        <div className="mx-auto grid w-full max-w-6xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 sm:flex sm:gap-3">
           <Button
             variant="secondary"
             size="icon"
@@ -220,7 +220,7 @@ export default function Profile() {
 
         <div className="mx-auto max-w-6xl px-4 pb-3 sm:hidden">
           <div className="flex items-center justify-between gap-2">
-            <Tabs defaultValue="overview" className="w-full" data-testid="tabs-profile">
+            <Tabs defaultValue="overview" className="w-full min-w-0" data-testid="tabs-profile">
               <TabsList className="w-full rounded-2xl border bg-card/60 p-1" data-testid="tabs-list-profile">
                 <TabsTrigger value="overview" className="flex-1 rounded-xl" data-testid="tab-overview">
                   Overview
