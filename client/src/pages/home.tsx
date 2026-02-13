@@ -8,7 +8,6 @@ import {
   Heart,
   Plus,
   Search,
-  Sparkles,
   Star,
   Tv2,
 } from "lucide-react";
@@ -226,7 +225,7 @@ function Cover({ m }: { m: Media }) {
             {m.year ? ` · ${m.year}` : ""}
           </div>
           <div className="flex items-center gap-1 rounded-full bg-black/35 px-2 py-1 text-xs text-white ring-1 ring-white/15">
-            <Sparkles className="h-3.5 w-3.5" />
+            <Star className="h-3.5 w-3.5 fill-white/90 text-white/90" />
             {m.ratingAvg.toFixed(1)}
           </div>
         </div>
@@ -383,7 +382,7 @@ export default function Home() {
                     className="inline-flex items-center gap-2 rounded-full border bg-card/60 px-3 py-1 text-xs text-muted-foreground"
                     data-testid="badge-slogan"
                   >
-                    <Sparkles className="h-3.5 w-3.5" />
+                    <Star className="h-3.5 w-3.5 fill-primary text-primary" />
                     taste across films, anime, books & TV
                   </div>
                   <h1

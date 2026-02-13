@@ -9,7 +9,7 @@ import {
   Heart,
   Plus,
   Settings2,
-  Sparkles,
+  Star,
   Tv2,
 } from "lucide-react";
 
@@ -221,7 +221,7 @@ export default function Profile() {
                           {profile.name}
                         </h2>
                         <Badge variant="secondary" className="rounded-full" data-testid="badge-pro">
-                          <Sparkles className="mr-1 h-3.5 w-3.5" />
+                          <Star className="mr-1 h-3.5 w-3.5 fill-primary text-primary" />
                           PROTOTYPE
                         </Badge>
                       </div>

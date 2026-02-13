@@ -6,7 +6,6 @@ import {
   BookOpen,
   Clapperboard,
   Film,
-  Sparkles,
   Star,
   Tv2,
 } from "lucide-react";
@@ -135,7 +134,7 @@ export default function ReviewCreate() {
                     className="inline-flex items-center gap-2 rounded-full border bg-card/60 px-3 py-1 text-xs text-muted-foreground"
                     data-testid="badge-new"
                   >
-                    <Sparkles className="h-3.5 w-3.5" />
+                    <Star className="h-3.5 w-3.5 fill-primary text-primary" />
                     log a feeling
                   </div>
                   <h2 className="mt-3 font-serif text-2xl font-semibold" data-testid="text-editor-title">

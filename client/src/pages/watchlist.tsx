@@ -7,7 +7,7 @@ import {
   Check,
   Clapperboard,
   Film,
-  Sparkles,
+  Star,
   Trash2,
   Tv2,
 } from "lucide-react";
@@ -140,7 +140,7 @@ export default function Watchlist() {
                   className="inline-flex items-center gap-2 rounded-full border bg-card/60 px-3 py-1 text-xs text-muted-foreground"
                   data-testid="badge-watchlist"
                 >
-                  <Sparkles className="h-3.5 w-3.5" />
+                  <Star className="h-3.5 w-3.5 fill-primary text-primary" />
                   one list, many mediums
                 </div>
                 <h2 className="mt-3 font-serif text-2xl font-semibold" data-testid="text-watchlist-title">

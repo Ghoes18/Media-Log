@@ -9,7 +9,6 @@ import {
   Film,
   Heart,
   Share2,
-  Sparkles,
   Star,
   Tv2,
 } from "lucide-react";
@@ -419,7 +418,7 @@ export default function MediaDetail() {
                               className="rounded-xl"
                               data-testid={`button-like-review-${r.id}`}
                             >
-                              <Sparkles className="mr-2 h-4 w-4" />
+                              <Heart className="mr-2 h-4 w-4" />
                               Like
                               <span className="ml-2 rounded-full bg-black/5 px-2 py-0.5 text-xs dark:bg-white/10">
                                 {r.likes}
