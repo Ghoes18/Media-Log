@@ -166,13 +166,17 @@ export default function Discover() {
     <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30">
       <header className="sticky top-0 z-30 border-b bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
-          <Link href="/" data-testid="link-back-home">
-            <a>
-              <Button variant="secondary" size="icon" className="rounded-xl" data-testid="button-back">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </a>
-          </Link>
+          <Button
+            variant="secondary"
+            size="icon"
+            className="rounded-xl"
+            data-testid="button-back"
+            asChild
+          >
+            <Link href="/" data-testid="link-back-home">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
 
           <div className="min-w-0">
             <h1 className="truncate font-serif text-lg font-semibold" data-testid="text-discover-title">
@@ -269,8 +273,7 @@ export default function Discover() {
 
             <div className="mt-3 grid gap-3">
               {filtered.map((m) => (
-                <Link key={m.id} href={`/m/${m.id}`} data-testid={`link-result-${m.id}`}>
-                  <a>
+                <Link key={m.id} href={`/m/${m.id}`} data-testid={`link-result-${m.id}`} className="block">
                     <Card className="glass bg-noise rounded-3xl p-4 sm:p-5 hover:opacity-[0.98] transition">
                       <div className="flex items-center gap-4">
                         <CoverMini m={m} />
@@ -304,7 +307,6 @@ export default function Discover() {
                         </div>
                       </div>
                     </Card>
-                  </a>
                 </Link>
               ))}
             </div>
@@ -314,19 +316,29 @@ export default function Discover() {
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link href="/" data-testid="nav-home">
-            <a className="text-sm font-medium text-muted-foreground hover:text-foreground">Home</a>
+          <Link
+            href="/"
+            data-testid="nav-home"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            Home
           </Link>
-          <Link href="/discover" data-testid="nav-discover">
-            <a className="text-sm font-medium hover:opacity-80">Discover</a>
+          <Link href="/discover" data-testid="nav-discover" className="text-sm font-medium hover:opacity-80">
+            Discover
           </Link>
-          <Link href="/watchlist" data-testid="nav-watchlist">
-            <a className="text-sm font-medium text-muted-foreground hover:text-foreground">
-              Watchlist
-            </a>
+          <Link
+            href="/watchlist"
+            data-testid="nav-watchlist"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            Watchlist
           </Link>
-          <Link href="/u/you" data-testid="nav-profile">
-            <a className="text-sm font-medium text-muted-foreground hover:text-foreground">Profile</a>
+          <Link
+            href="/u/you"
+            data-testid="nav-profile"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            Profile
           </Link>
         </div>
       </div>

@@ -149,13 +149,17 @@ export default function Profile() {
     <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30">
       <header className="sticky top-0 z-30 border-b bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
-          <Link href="/" data-testid="link-back-home">
-            <a>
-              <Button variant="secondary" size="icon" className="rounded-xl" data-testid="button-back">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </a>
-          </Link>
+          <Button
+            variant="secondary"
+            size="icon"
+            className="rounded-xl"
+            data-testid="button-back"
+            asChild
+          >
+            <Link href="/" data-testid="link-back-home">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
 
           <div className="min-w-0">
             <h1 className="truncate font-serif text-lg font-semibold" data-testid="text-profile-title">
@@ -272,16 +276,19 @@ export default function Profile() {
                 {favoritesSeed.map((m) => {
                   const Icon = iconFor(m.type);
                   return (
-                    <Link key={m.id} href={`/m/${m.id}`} data-testid={`link-favorite-${m.id}`}>
-                      <a className="group">
-                        <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-                          <div className={cn("relative aspect-[3/4] bg-gradient-to-br", m.coverGradient)}>
-                            <div className="absolute left-2 top-2 rounded-full bg-black/35 p-1 ring-1 ring-white/15">
-                              <Icon className="h-3.5 w-3.5 text-white" strokeWidth={2} />
-                            </div>
+                    <Link
+                      key={m.id}
+                      href={`/m/${m.id}`}
+                      data-testid={`link-favorite-${m.id}`}
+                      className="group"
+                    >
+                      <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+                        <div className={cn("relative aspect-[3/4] bg-gradient-to-br", m.coverGradient)}>
+                          <div className="absolute left-2 top-2 rounded-full bg-black/35 p-1 ring-1 ring-white/15">
+                            <Icon className="h-3.5 w-3.5 text-white" strokeWidth={2} />
                           </div>
                         </div>
-                      </a>
+                      </div>
                     </Link>
                   );
                 })}
@@ -298,8 +305,12 @@ export default function Profile() {
                     Save things for later.
                   </div>
                 </div>
-                <Link href="/watchlist" data-testid="link-watchlist">
-                  <a className="text-sm font-medium text-primary hover:opacity-80">Open</a>
+                <Link
+                  href="/watchlist"
+                  data-testid="link-watchlist"
+                  className="text-sm font-medium text-primary hover:opacity-80"
+                >
+                  Open
                 </Link>
               </div>
 
@@ -307,10 +318,13 @@ export default function Profile() {
 
               <div className="grid grid-cols-2 gap-2">
                 {["m7", "m8", "m9", "m10"].map((id) => (
-                  <Link key={id} href={`/m/${id}`} data-testid={`link-watch-${id}`}>
-                    <a className="rounded-2xl border bg-card/60 px-3 py-2 text-sm font-medium hover:bg-card/80 transition">
-                      {id}
-                    </a>
+                  <Link
+                    key={id}
+                    href={`/m/${id}`}
+                    data-testid={`link-watch-${id}`}
+                    className="rounded-2xl border bg-card/60 px-3 py-2 text-sm font-medium hover:bg-card/80 transition"
+                  >
+                    {id}
                   </Link>
                 ))}
               </div>
@@ -338,32 +352,30 @@ export default function Profile() {
               <div className="space-y-3">
                 {activitySeed.map((a) => (
                   <Link key={a.id} href={`/m/${a.media.id}`} data-testid={`link-activity-${a.id}`}>
-                    <a>
-                      <Card className="rounded-3xl border bg-card/60 p-4 hover:bg-card/80 transition">
-                        <div className="flex items-start gap-3">
-                          <div
-                            className={cn(
-                              "h-12 w-10 overflow-hidden rounded-2xl border bg-card shadow-sm",
-                            )}
-                          >
-                            <div className={cn("h-full w-full bg-gradient-to-br", a.media.coverGradient)} />
+                    <Card className="rounded-3xl border bg-card/60 p-4 hover:bg-card/80 transition">
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={cn(
+                            "h-12 w-10 overflow-hidden rounded-2xl border bg-card shadow-sm",
+                          )}
+                        >
+                          <div className={cn("h-full w-full bg-gradient-to-br", a.media.coverGradient)} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="truncate text-sm font-semibold" data-testid={`text-activity-blurb-${a.id}`}>
+                              {a.blurb}
+                            </div>
+                            <div className="text-xs text-muted-foreground" data-testid={`text-activity-when-${a.id}`}>
+                              {a.when}
+                            </div>
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="truncate text-sm font-semibold" data-testid={`text-activity-blurb-${a.id}`}>
-                                {a.blurb}
-                              </div>
-                              <div className="text-xs text-muted-foreground" data-testid={`text-activity-when-${a.id}`}>
-                                {a.when}
-                              </div>
-                            </div>
-                            <div className="mt-1 truncate text-xs text-muted-foreground" data-testid={`text-activity-title-${a.id}`}>
-                              {a.media.title}
-                            </div>
+                          <div className="mt-1 truncate text-xs text-muted-foreground" data-testid={`text-activity-title-${a.id}`}>
+                            {a.media.title}
                           </div>
                         </div>
-                      </Card>
-                    </a>
+                      </div>
+                    </Card>
                   </Link>
                 ))}
               </div>
@@ -374,19 +386,29 @@ export default function Profile() {
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link href="/" data-testid="nav-home">
-            <a className="text-sm font-medium text-muted-foreground hover:text-foreground">Home</a>
+          <Link
+            href="/"
+            data-testid="nav-home"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            Home
           </Link>
-          <Link href="/discover" data-testid="nav-discover">
-            <a className="text-sm font-medium text-muted-foreground hover:text-foreground">Discover</a>
+          <Link
+            href="/discover"
+            data-testid="nav-discover"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            Discover
           </Link>
-          <Link href="/watchlist" data-testid="nav-watchlist">
-            <a className="text-sm font-medium text-muted-foreground hover:text-foreground">
-              Watchlist
-            </a>
+          <Link
+            href="/watchlist"
+            data-testid="nav-watchlist"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            Watchlist
           </Link>
-          <Link href="/u/you" data-testid="nav-profile">
-            <a className="text-sm font-medium hover:opacity-80">Profile</a>
+          <Link href="/u/you" data-testid="nav-profile" className="text-sm font-medium hover:opacity-80">
+            Profile
           </Link>
         </div>
       </div>

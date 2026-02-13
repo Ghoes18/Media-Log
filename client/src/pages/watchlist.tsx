@@ -97,13 +97,17 @@ export default function Watchlist() {
     <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30">
       <header className="sticky top-0 z-30 border-b bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
-          <Link href="/" data-testid="link-back-home">
-            <a>
-              <Button variant="secondary" size="icon" className="rounded-xl" data-testid="button-back">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </a>
-          </Link>
+          <Button
+            variant="secondary"
+            size="icon"
+            className="rounded-xl"
+            data-testid="button-back"
+            asChild
+          >
+            <Link href="/" data-testid="link-back-home">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
 
           <div className="min-w-0">
             <h1 className="truncate font-serif text-lg font-semibold" data-testid="text-watchlist-page-title">
@@ -269,13 +273,11 @@ export default function Watchlist() {
                     Switch the filter or add a few items from Discover.
                   </p>
                   <div className="mt-4">
-                    <Link href="/discover" data-testid="link-go-discover">
-                      <a>
-                        <Button className="rounded-xl" data-testid="button-go-discover">
-                          Browse Discover
-                        </Button>
-                      </a>
-                    </Link>
+                    <Button className="rounded-xl" data-testid="button-go-discover" asChild>
+                      <Link href="/discover" data-testid="link-go-discover">
+                        Browse Discover
+                      </Link>
+                    </Button>
                   </div>
                 </div>
               ) : null}
@@ -286,17 +288,29 @@ export default function Watchlist() {
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link href="/" data-testid="nav-home">
-            <a className="text-sm font-medium text-muted-foreground hover:text-foreground">Home</a>
+          <Link
+            href="/"
+            data-testid="nav-home"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            Home
           </Link>
-          <Link href="/discover" data-testid="nav-discover">
-            <a className="text-sm font-medium text-muted-foreground hover:text-foreground">Discover</a>
+          <Link
+            href="/discover"
+            data-testid="nav-discover"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            Discover
           </Link>
-          <Link href="/watchlist" data-testid="nav-watchlist">
-            <a className="text-sm font-medium hover:opacity-80">Watchlist</a>
+          <Link href="/watchlist" data-testid="nav-watchlist" className="text-sm font-medium hover:opacity-80">
+            Watchlist
           </Link>
-          <Link href="/u/you" data-testid="nav-profile">
-            <a className="text-sm font-medium text-muted-foreground hover:text-foreground">Profile</a>
+          <Link
+            href="/u/you"
+            data-testid="nav-profile"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            Profile
           </Link>
         </div>
       </div>

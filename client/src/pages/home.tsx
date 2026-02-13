@@ -244,20 +244,14 @@ function TopNav({
   return (
     <div className="sticky top-0 z-40 border-b bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
-        <Link href="/" data-testid="link-home">
-          <a className="group flex items-center gap-2">
-            <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-primary/18 via-primary/8 to-accent/14 ring-1 ring-border ring-soft">
-              <span className="font-serif text-lg font-semibold text-gradient">T</span>
-            </div>
-            <div className="hidden sm:block">
-              <div className="font-serif text-[15px] font-semibold leading-tight">
-                Tastelog
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Your taste, across mediums
-              </div>
-            </div>
-          </a>
+        <Link href="/" data-testid="link-home" className="group flex items-center gap-2">
+          <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-primary/18 via-primary/8 to-accent/14 ring-1 ring-border ring-soft">
+            <span className="font-serif text-lg font-semibold text-gradient">T</span>
+          </div>
+          <div className="hidden sm:block">
+            <div className="font-serif text-[15px] font-semibold leading-tight">Tastelog</div>
+            <div className="text-xs text-muted-foreground">Your taste, across mediums</div>
+          </div>
         </Link>
 
         <div className="ml-auto hidden w-[420px] max-w-full items-center gap-2 rounded-2xl border bg-card/60 px-3 py-2 shadow-sm backdrop-blur sm:flex">
@@ -277,14 +271,11 @@ function TopNav({
         <div className="flex items-center gap-2">
           <ThemeToggle />
 
-          <Link href="/review/new" data-testid="link-new-review">
-            <a>
-              <Button size="sm" className="rounded-xl" data-testid="button-log">
-                <Plus className="mr-2 h-4 w-4" />
-                Log
-              </Button>
-            </a>
-          </Link>
+          <Button size="sm" className="rounded-xl" data-testid="button-log" asChild>
+            <Link href="/review/new" data-testid="link-new-review">
+              Log
+            </Link>
+          </Button>
 
           <Sheet>
             <SheetTrigger asChild>
@@ -319,15 +310,11 @@ function TopNav({
             </SheetContent>
           </Sheet>
 
-          <Link href="/u/you" data-testid="link-profile">
-            <a className="grid place-items-center">
-              <Avatar className="h-9 w-9 ring-1 ring-border" data-testid="avatar-you">
-                <AvatarImage alt="You" src="" />
-                <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
-                  Y
-                </AvatarFallback>
-              </Avatar>
-            </a>
+          <Link href="/u/you" data-testid="link-profile" className="grid place-items-center">
+            <Avatar className="h-9 w-9 ring-1 ring-border" data-testid="avatar-you">
+              <AvatarImage alt="You" src="" />
+              <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">Y</AvatarFallback>
+            </Avatar>
           </Link>
         </div>
       </div>
@@ -402,24 +389,21 @@ export default function Home() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Link href="/discover" data-testid="link-discover">
-                    <a>
-                      <Button
-                        variant="secondary"
-                        className="rounded-xl"
-                        data-testid="button-explore"
-                      >
-                        Explore
-                      </Button>
-                    </a>
-                  </Link>
-                  <Link href="/review/new" data-testid="link-start-review">
-                    <a>
-                      <Button className="rounded-xl" data-testid="button-start-review">
-                        Start a review
-                      </Button>
-                    </a>
-                  </Link>
+                  <Button
+                    variant="secondary"
+                    className="rounded-xl"
+                    data-testid="button-explore"
+                    asChild
+                  >
+                    <Link href="/discover" data-testid="link-discover">
+                      Explore
+                    </Link>
+                  </Button>
+                  <Button className="rounded-xl" data-testid="button-start-review" asChild>
+                    <Link href="/review/new" data-testid="link-start-review">
+                      Start a review
+                    </Link>
+                  </Button>
                 </div>
               </div>
 
@@ -454,38 +438,43 @@ export default function Home() {
                   <div className="text-xs text-muted-foreground" data-testid="text-results">
                     {media.length} results
                   </div>
-                  <Link href="/discover" data-testid="link-see-all">
-                    <a className="text-xs font-medium text-primary hover:opacity-80">
-                      See all
-                    </a>
+                  <Link
+                    href="/discover"
+                    data-testid="link-see-all"
+                    className="text-xs font-medium text-primary hover:opacity-80"
+                  >
+                    See all
                   </Link>
                 </div>
               </div>
 
               <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3">
                 {media.slice(0, 6).map((m) => (
-                  <Link key={m.id} href={`/m/${m.id}`} data-testid={`link-media-${m.id}`}>
-                    <a className="group">
-                      <motion.div
-                        whileHover={{ y: -4 }}
-                        transition={{ duration: 0.2 }}
-                        className="rounded-2xl"
-                      >
-                        <Cover m={m} />
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          {m.tags.slice(0, 3).map((t) => (
-                            <Badge
-                              key={t}
-                              variant="secondary"
-                              className="rounded-full"
-                              data-testid={`badge-tag-${m.id}-${t}`}
-                            >
-                              {t}
-                            </Badge>
-                          ))}
-                        </div>
-                      </motion.div>
-                    </a>
+                  <Link
+                    key={m.id}
+                    href={`/m/${m.id}`}
+                    data-testid={`link-media-${m.id}`}
+                    className="group"
+                  >
+                    <motion.div
+                      whileHover={{ y: -4 }}
+                      transition={{ duration: 0.2 }}
+                      className="rounded-2xl"
+                    >
+                      <Cover m={m} />
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        {m.tags.slice(0, 3).map((t) => (
+                          <Badge
+                            key={t}
+                            variant="secondary"
+                            className="rounded-full"
+                            data-testid={`badge-tag-${m.id}-${t}`}
+                          >
+                            {t}
+                          </Badge>
+                        ))}
+                      </div>
+                    </motion.div>
                   </Link>
                 ))}
               </div>
@@ -496,8 +485,12 @@ export default function Home() {
                 <h2 className="font-serif text-xl font-semibold" data-testid="text-activity-title">
                   Recent activity
                 </h2>
-                <Link href="/discover" data-testid="link-activity-more">
-                  <a className="text-sm font-medium text-primary hover:opacity-80">Browse</a>
+                <Link
+                  href="/discover"
+                  data-testid="link-activity-more"
+                  className="text-sm font-medium text-primary hover:opacity-80"
+                >
+                  Browse
                 </Link>
               </div>
 
@@ -510,17 +503,12 @@ export default function Home() {
                   >
                     <div className="flex items-start gap-3">
                       <Link href={`/u/${r.author.handle}`} data-testid={`link-author-${r.id}`}>
-                        <a>
-                          <Avatar
-                            className="h-10 w-10 ring-1 ring-border"
-                            data-testid={`avatar-author-${r.id}`}
-                          >
-                            <AvatarImage alt={r.author.name} src={r.author.avatar ?? ""} />
-                            <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
-                              {r.author.name.slice(0, 1)}
-                            </AvatarFallback>
-                          </Avatar>
-                        </a>
+                        <Avatar className="h-10 w-10 ring-1 ring-border" data-testid={`avatar-author-${r.id}`}>
+                          <AvatarImage alt={r.author.name} src={r.author.avatar ?? ""} />
+                          <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
+                            {r.author.name.slice(0, 1)}
+                          </AvatarFallback>
+                        </Avatar>
                       </Link>
 
                       <div className="min-w-0 flex-1">
@@ -530,10 +518,9 @@ export default function Home() {
                               <Link
                                 href={`/u/${r.author.handle}`}
                                 data-testid={`link-handle-${r.id}`}
+                                className="truncate text-sm font-semibold hover:opacity-80"
                               >
-                                <a className="truncate text-sm font-semibold hover:opacity-80">
-                                  {r.author.name}
-                                </a>
+                                {r.author.name}
                               </Link>
                               <span
                                 className="text-xs text-muted-foreground"
@@ -542,10 +529,12 @@ export default function Home() {
                                 {r.createdAtLabel}
                               </span>
                             </div>
-                            <Link href={`/m/${m.id}`} data-testid={`link-reviewed-${r.id}`}>
-                              <a className="mt-0.5 block truncate text-sm text-muted-foreground hover:text-foreground">
-                                reviewed <span className="font-medium text-foreground">{m.title}</span>
-                              </a>
+                            <Link
+                              href={`/m/${m.id}`}
+                              data-testid={`link-reviewed-${r.id}`}
+                              className="mt-0.5 block truncate text-sm text-muted-foreground hover:text-foreground"
+                            >
+                              reviewed <span className="font-medium text-foreground">{m.title}</span>
                             </Link>
                           </div>
                           <Stars value={r.rating} />
@@ -587,18 +576,17 @@ export default function Home() {
                             </span>
                           </Button>
 
-                          <Link href={`/m/${m.id}`} data-testid={`link-open-${r.id}`}>
-                            <a>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="rounded-xl"
-                                data-testid={`button-open-${r.id}`}
-                              >
-                                Open
-                              </Button>
-                            </a>
-                          </Link>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="rounded-xl"
+                            data-testid={`button-open-${r.id}`}
+                            asChild
+                          >
+                            <Link href={`/m/${m.id}`} data-testid={`link-open-${r.id}`}>
+                              Open
+                            </Link>
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -626,13 +614,17 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="ml-auto">
-                  <Link href="/u/you" data-testid="link-go-profile">
-                    <a>
-                      <Button size="sm" variant="secondary" className="rounded-xl" data-testid="button-view-profile">
-                        View
-                      </Button>
-                    </a>
-                  </Link>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="rounded-xl"
+                    data-testid="button-view-profile"
+                    asChild
+                  >
+                    <Link href="/u/you" data-testid="link-go-profile">
+                      View
+                    </Link>
+                  </Button>
                 </div>
               </div>
 
@@ -658,24 +650,21 @@ export default function Home() {
                   <div className="text-sm font-semibold" data-testid="text-faves-title">
                     Your favorites
                   </div>
-                  <Link href="/u/you" data-testid="link-edit-faves">
-                    <a className="text-xs font-medium text-primary hover:opacity-80">Edit</a>
+                  <Link
+                    href="/u/you"
+                    data-testid="link-edit-faves"
+                    className="text-xs font-medium text-primary hover:opacity-80"
+                  >
+                    Edit
                   </Link>
                 </div>
 
                 <div className="mt-3 grid grid-cols-4 gap-2">
                   {mediaSeed.slice(0, 4).map((m) => (
                     <Link key={m.id} href={`/m/${m.id}`} data-testid={`link-fave-${m.id}`}>
-                      <a>
-                        <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-                          <div
-                            className={cn(
-                              "aspect-[3/4] bg-gradient-to-br",
-                              m.coverGradient,
-                            )}
-                          />
-                        </div>
-                      </a>
+                      <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+                        <div className={cn("aspect-[3/4] bg-gradient-to-br", m.coverGradient)} />
+                      </div>
                     </Link>
                   ))}
                 </div>
@@ -692,8 +681,12 @@ export default function Home() {
                     Save things for later.
                   </div>
                 </div>
-                <Link href="/watchlist" data-testid="link-watchlist">
-                  <a className="text-sm font-medium text-primary hover:opacity-80">Open</a>
+                <Link
+                  href="/watchlist"
+                  data-testid="link-watchlist"
+                  className="text-sm font-medium text-primary hover:opacity-80"
+                >
+                  Open
                 </Link>
               </div>
 
@@ -703,24 +696,22 @@ export default function Home() {
                 <div className="space-y-2">
                   {mediaSeed.slice(1, 6).map((m) => (
                     <Link key={m.id} href={`/m/${m.id}`} data-testid={`row-watchlist-${m.id}`}>
-                      <a>
-                        <div className="flex items-center gap-3 rounded-2xl border bg-card/60 p-3 hover:bg-card/80 transition">
-                          <div className="h-10 w-10 overflow-hidden rounded-xl border bg-card shadow-sm">
-                            <div className={cn("h-full w-full bg-gradient-to-br", m.coverGradient)} />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-semibold" data-testid={`text-watchlist-title-${m.id}`}>
-                              {m.title}
-                            </div>
-                            <div className="truncate text-xs text-muted-foreground" data-testid={`text-watchlist-meta-${m.id}`}>
-                              {m.creator}
-                            </div>
-                          </div>
-                          <Badge variant="secondary" className="rounded-full">
-                            {m.type}
-                          </Badge>
+                      <div className="flex items-center gap-3 rounded-2xl border bg-card/60 p-3 hover:bg-card/80 transition">
+                        <div className="h-10 w-10 overflow-hidden rounded-xl border bg-card shadow-sm">
+                          <div className={cn("h-full w-full bg-gradient-to-br", m.coverGradient)} />
                         </div>
-                      </a>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold" data-testid={`text-watchlist-title-${m.id}`}>
+                            {m.title}
+                          </div>
+                          <div className="truncate text-xs text-muted-foreground" data-testid={`text-watchlist-meta-${m.id}`}>
+                            {m.creator}
+                          </div>
+                        </div>
+                        <Badge variant="secondary" className="rounded-full">
+                          {m.type}
+                        </Badge>
+                      </div>
                     </Link>
                   ))}
                 </div>
@@ -732,23 +723,29 @@ export default function Home() {
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link href="/" data-testid="nav-home">
-            <a className="text-sm font-medium hover:opacity-80">Home</a>
+          <Link href="/" data-testid="nav-home" className="text-sm font-medium hover:opacity-80">
+            Home
           </Link>
-          <Link href="/discover" data-testid="nav-discover">
-            <a className="text-sm font-medium text-muted-foreground hover:text-foreground">
-              Discover
-            </a>
+          <Link
+            href="/discover"
+            data-testid="nav-discover"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            Discover
           </Link>
-          <Link href="/watchlist" data-testid="nav-watchlist">
-            <a className="text-sm font-medium text-muted-foreground hover:text-foreground">
-              Watchlist
-            </a>
+          <Link
+            href="/watchlist"
+            data-testid="nav-watchlist"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            Watchlist
           </Link>
-          <Link href="/u/you" data-testid="nav-profile">
-            <a className="text-sm font-medium text-muted-foreground hover:text-foreground">
-              Profile
-            </a>
+          <Link
+            href="/u/you"
+            data-testid="nav-profile"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            Profile
           </Link>
         </div>
       </div>
