@@ -148,11 +148,11 @@ export default function Profile() {
   return (
     <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30">
       <header className="sticky top-0 z-30 border-b bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
+        <div className="mx-auto grid max-w-6xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 sm:flex sm:gap-3">
           <Button
             variant="secondary"
             size="icon"
-            className="rounded-xl"
+            className="h-10 w-10 rounded-xl"
             data-testid="button-back"
             asChild
           >
@@ -162,7 +162,7 @@ export default function Profile() {
           </Button>
 
           <div className="min-w-0">
-            <h1 className="truncate font-serif text-lg font-semibold" data-testid="text-profile-title">
+            <h1 className="truncate font-serif text-base font-semibold sm:text-lg" data-testid="text-profile-title">
               {profile.name}
             </h1>
             <p className="truncate text-xs text-muted-foreground" data-testid="text-profile-handle">
@@ -170,32 +170,69 @@ export default function Profile() {
             </p>
           </div>
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2">
             {isMe ? (
-              <Button variant="secondary" className="rounded-xl" data-testid="button-edit-profile">
-                <Settings2 className="mr-2 h-4 w-4" />
-                Edit
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="h-10 w-10 rounded-xl sm:hidden"
+                  data-testid="button-settings"
+                >
+                  <Settings2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="hidden h-10 rounded-xl sm:inline-flex"
+                  data-testid="button-edit-profile"
+                >
+                  <Settings2 className="mr-2 h-4 w-4" />
+                  Edit profile
+                </Button>
+              </>
             ) : (
               <Button
-                className="rounded-xl"
+                className="h-10 rounded-xl"
                 variant={following ? "secondary" : "default"}
                 data-testid="button-follow"
                 onClick={() => setFollowing((v) => !v)}
               >
-                {following ? (
-                  <>
-                    <Heart className="mr-2 h-4 w-4" />
-                    Following
-                  </>
-                ) : (
-                  <>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Follow
-                  </>
-                )}
+                <span className="sm:hidden" data-testid="text-follow-compact">
+                  {following ? "Following" : "Follow"}
+                </span>
+                <span className="hidden sm:inline" data-testid="text-follow-full">
+                  {following ? (
+                    <>
+                      <Heart className="mr-2 h-4 w-4" />
+                      Following
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Follow
+                    </>
+                  )}
+                </span>
               </Button>
             )}
+          </div>
+        </div>
+
+        <div className="mx-auto max-w-6xl px-4 pb-3 sm:hidden">
+          <div className="flex items-center justify-between gap-2">
+            <Tabs defaultValue="overview" className="w-full" data-testid="tabs-profile">
+              <TabsList className="w-full rounded-2xl border bg-card/60 p-1" data-testid="tabs-list-profile">
+                <TabsTrigger value="overview" className="flex-1 rounded-xl" data-testid="tab-overview">
+                  Overview
+                </TabsTrigger>
+                <TabsTrigger value="faves" className="flex-1 rounded-xl" data-testid="tab-faves">
+                  Favorites
+                </TabsTrigger>
+                <TabsTrigger value="activity" className="flex-1 rounded-xl" data-testid="tab-activity">
+                  Activity
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
         </div>
       </header>
