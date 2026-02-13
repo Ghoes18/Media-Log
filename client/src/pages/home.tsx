@@ -5,6 +5,7 @@ import {
   BookOpen,
   Clapperboard,
   Film,
+  Heart,
   Plus,
   Search,
   Sparkles,
@@ -12,6 +13,7 @@ import {
   Tv2,
 } from "lucide-react";
 
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -217,9 +219,7 @@ function Cover({ m }: { m: Media }) {
         </span>
       </div>
       <div className="absolute bottom-3 left-3 right-3">
-        <div className="text-sm font-semibold leading-tight text-white">
-          {m.title}
-        </div>
+        <div className="text-sm font-semibold leading-tight text-white">{m.title}</div>
         <div className="mt-0.5 flex items-center justify-between gap-2">
           <div className="truncate text-xs text-white/80">
             {m.creator}
@@ -276,6 +276,8 @@ function TopNav({
         </div>
 
         <div className="flex items-center gap-2">
+          <ThemeToggle />
+
           <Link href="/review/new" data-testid="link-new-review">
             <a>
               <Button size="sm" className="rounded-xl" data-testid="button-log">
@@ -347,7 +349,9 @@ export default function Home() {
     const q = query.trim().toLowerCase();
     const filtered = q
       ? mediaSeed.filter((m) =>
-          [m.title, m.creator, m.year].some((v) => (v ?? "").toLowerCase().includes(q)),
+          [m.title, m.creator, m.year].some((v) =>
+            (v ?? "").toLowerCase().includes(q),
+          ),
         )
       : mediaSeed;
 
@@ -559,13 +563,22 @@ export default function Home() {
                           <Button
                             variant={liked[r.id] ? "default" : "secondary"}
                             size="sm"
-                            className="rounded-xl"
-                            onClick={() =>
-                              setLiked((p) => ({ ...p, [r.id]: !p[r.id] }))
-                            }
+                            className={cn(
+                              "rounded-xl",
+                              liked[r.id] && "bg-primary/20 text-foreground border border-border",
+                            )}
+                            onClick={() => setLiked((p) => ({ ...p, [r.id]: !p[r.id] }))}
                             data-testid={`button-like-${r.id}`}
                           >
-                            <Sparkles className="mr-2 h-4 w-4" />
+                            <Heart
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                liked[r.id]
+                                  ? "fill-primary text-primary"
+                                  : "text-muted-foreground",
+                              )}
+                              strokeWidth={2}
+                            />
                             {liked[r.id] ? "Liked" : "Like"}
                             <span
                               className="ml-2 rounded-full bg-black/5 px-2 py-0.5 text-xs dark:bg-white/10"
