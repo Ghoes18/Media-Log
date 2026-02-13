@@ -219,7 +219,7 @@ export default function Profile() {
         </div>
 
         <div className="mx-auto max-w-6xl px-4 pb-3 sm:hidden">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-2 overflow-x-auto">
             <Tabs defaultValue="overview" className="w-full min-w-0" data-testid="tabs-profile">
               <TabsList className="w-full rounded-2xl border bg-card/60 p-1" data-testid="tabs-list-profile">
                 <TabsTrigger value="overview" className="flex-1 rounded-xl" data-testid="tab-overview">
@@ -292,7 +292,7 @@ export default function Profile() {
               </div>
             </Card>
 
-            <Card className="glass bg-noise rounded-3xl p-5 sm:p-7" data-testid="card-favorites">
+            <Card className="glass bg-noise rounded-3xl p-5 sm:p-7 overflow-hidden" data-testid="card-favorites">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="font-serif text-lg font-semibold" data-testid="text-favorites-title">
@@ -332,7 +332,7 @@ export default function Profile() {
               </div>
             </Card>
 
-            <Card className="glass bg-noise rounded-3xl p-5 sm:p-7" data-testid="card-watchlist">
+            <Card className="glass bg-noise rounded-3xl p-5 sm:p-7 overflow-hidden" data-testid="card-watchlist">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="font-serif text-lg font-semibold" data-testid="text-watchlist-title">
@@ -369,7 +369,7 @@ export default function Profile() {
           </section>
 
           <section>
-            <Card className="glass bg-noise rounded-3xl p-5 sm:p-7" data-testid="card-activity">
+            <Card className="glass bg-noise rounded-3xl p-5 sm:p-7 overflow-hidden" data-testid="card-activity">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="font-serif text-lg font-semibold" data-testid="text-activity-title">
