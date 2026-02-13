@@ -146,9 +146,9 @@ export default function Profile() {
   }, [handle, isMe]);
 
   return (
-    <div className="min-h-dvh overflow-x-hidden bg-gradient-to-b from-background via-background to-muted/30">
+    <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30">
       <header className="sticky top-0 z-30 border-b bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
-        <div className="mx-auto grid w-full max-w-6xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 sm:flex sm:gap-3">
+        <div className="mx-auto grid max-w-6xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:flex sm:gap-3">
           <Button
             variant="secondary"
             size="icon"
@@ -242,12 +242,12 @@ export default function Profile() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
-          className="grid gap-6 lg:grid-cols-[.9fr_1.1fr]"
+          className="grid gap-6 lg:grid-cols-[.9fr_1.1fr] min-w-0"
         >
           <section className="space-y-4">
-            <Card className="glass bg-noise rounded-3xl p-5 sm:p-7" data-testid="card-profile-header">
+            <Card className="glass bg-noise rounded-3xl p-5 sm:p-7 min-w-0" data-testid="card-profile-header">
               <div className="flex items-start gap-4">
-                <Avatar className="h-14 w-14 ring-1 ring-border" data-testid="avatar-profile">
+                <Avatar className="h-14 w-14 shrink-0 ring-1 ring-border" data-testid="avatar-profile">
                   <AvatarImage alt={profile.name} src="" />
                   <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
                     {profile.name.slice(0, 1)}
@@ -256,12 +256,12 @@ export default function Profile() {
 
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <h2 className="truncate font-serif text-2xl font-semibold" data-testid="text-name">
                           {profile.name}
                         </h2>
-                        <Badge variant="secondary" className="rounded-full" data-testid="badge-pro">
+                        <Badge variant="secondary" className="shrink-0 rounded-full" data-testid="badge-pro">
                           <Star className="mr-1 h-3.5 w-3.5 fill-primary text-primary" />
                           PROTOTYPE
                         </Badge>
@@ -393,7 +393,7 @@ export default function Profile() {
                       <div className="flex items-start gap-3">
                         <div
                           className={cn(
-                            "h-12 w-10 overflow-hidden rounded-2xl border bg-card shadow-sm",
+                            "h-12 w-10 shrink-0 overflow-hidden rounded-2xl border bg-card shadow-sm",
                           )}
                         >
                           <div className={cn("h-full w-full bg-gradient-to-br", a.media.coverGradient)} />
