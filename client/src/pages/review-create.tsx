@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -9,6 +9,9 @@ import {
   Star,
   Tv2,
 } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,58 +24,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 type MediaType = "movie" | "anime" | "book" | "tv";
-
-type Media = {
-  id: string;
-  type: MediaType;
-  title: string;
-  creator?: string;
-  year?: string;
-  coverGradient: string;
-};
-
-const seed: Media[] = [
-  {
-    id: "m1",
-    type: "movie",
-    title: "Blade Runner 2049",
-    year: "2017",
-    creator: "Denis Villeneuve",
-    coverGradient: "from-violet-500/30 via-fuchsia-500/20 to-emerald-400/20",
-  },
-  {
-    id: "m2",
-    type: "anime",
-    title: "Cowboy Bebop",
-    year: "1998",
-    creator: "Shinichirō Watanabe",
-    coverGradient: "from-orange-500/25 via-rose-500/15 to-sky-500/15",
-  },
-  {
-    id: "m3",
-    type: "book",
-    title: "The Left Hand of Darkness",
-    year: "1969",
-    creator: "Ursula K. Le Guin",
-    coverGradient: "from-sky-500/20 via-indigo-500/15 to-emerald-500/15",
-  },
-  {
-    id: "m4",
-    type: "tv",
-    title: "The Bear",
-    year: "2022",
-    creator: "Christopher Storer",
-    coverGradient: "from-emerald-500/20 via-teal-500/15 to-amber-500/15",
-  },
-  {
-    id: "m5",
-    type: "movie",
-    title: "Spirited Away",
-    year: "2001",
-    creator: "Hayao Miyazaki",
-    coverGradient: "from-emerald-500/25 via-cyan-500/15 to-violet-500/15",
-  },
-];
 
 function iconFor(type: MediaType) {
   switch (type) {
@@ -88,13 +39,84 @@ function iconFor(type: MediaType) {
 }
 
 export default function ReviewCreate() {
+  const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
   const [medium, setMedium] = useState<MediaType>("movie");
   const [title, setTitle] = useState("");
+  const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
   const [rating, setRating] = useState(4);
   const [text, setText] = useState("");
 
-  const quickPick = useMemo(() => seed.filter((m) => m.type === medium), [medium]);
+  const { data: allMedia = [], isLoading: mediaLoading } = useQuery<any[]>({
+    queryKey: ["/api/media"],
+  });
+
+  const { data: currentUser } = useQuery<any>({
+    queryKey: ["/api/users/username/alice"],
+  });
+
+  const quickPick = useMemo(() => {
+    let filtered = allMedia.filter((m: any) => m.type === medium);
+    if (title && !selectedMediaId) {
+      filtered = filtered.filter((m: any) =>
+        m.title.toLowerCase().includes(title.toLowerCase())
+      );
+    }
+    return filtered;
+  }, [medium, allMedia, title, selectedMediaId]);
+
+  const titleMatches = useMemo(() => {
+    if (!title || selectedMediaId) return [];
+    return allMedia.filter((m: any) =>
+      m.title.toLowerCase().includes(title.toLowerCase())
+    );
+  }, [title, allMedia, selectedMediaId]);
+
+  const publishMutation = useMutation({
+    mutationFn: async (data: { userId: string; mediaId: string; rating: number; body: string }) => {
+      const res = await apiRequest("POST", "/api/reviews", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/reviews/recent"] });
+      toast.success("Review published!");
+      if (selectedMediaId) {
+        navigate(`/m/${selectedMediaId}`);
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to publish review");
+    },
+  });
+
   const Icon = iconFor(medium);
+
+  const canPublish = !!selectedMediaId && text.trim().length > 0 && !publishMutation.isPending;
+
+  const handlePublish = () => {
+    if (!currentUser || !selectedMediaId) return;
+    publishMutation.mutate({
+      userId: currentUser.id,
+      mediaId: selectedMediaId,
+      rating,
+      body: text,
+    });
+  };
+
+  const handleQuickPick = (m: any) => {
+    setTitle(m.title);
+    setSelectedMediaId(m.id);
+  };
+
+  const handleTitleChange = (value: string) => {
+    setTitle(value);
+    setSelectedMediaId(null);
+  };
+
+  const handleTitleMatch = (m: any) => {
+    setTitle(m.title);
+    setSelectedMediaId(m.id);
+  };
 
   return (
     <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30">
@@ -163,7 +185,11 @@ export default function ReviewCreate() {
                   <Label data-testid="label-medium">Medium</Label>
                   <Select
                     value={medium}
-                    onValueChange={(v) => setMedium(v as any)}
+                    onValueChange={(v) => {
+                      setMedium(v as any);
+                      setSelectedMediaId(null);
+                      setTitle("");
+                    }}
                   >
                     <SelectTrigger className="rounded-2xl" data-testid="select-medium">
                       <SelectValue placeholder="Select medium" />
@@ -187,26 +213,47 @@ export default function ReviewCreate() {
 
                 <div className="grid gap-2">
                   <Label data-testid="label-title">Title</Label>
-                  <Input
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Search or type a title…"
-                    className="rounded-2xl"
-                    data-testid="input-title"
-                  />
+                  <div className="relative">
+                    <Input
+                      value={title}
+                      onChange={(e) => handleTitleChange(e.target.value)}
+                      placeholder="Search or type a title…"
+                      className="rounded-2xl"
+                      data-testid="input-title"
+                    />
+                    {titleMatches.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-2xl border bg-card shadow-lg">
+                        {titleMatches.map((m: any) => (
+                          <button
+                            key={m.id}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50"
+                            data-testid={`suggestion-${m.id}`}
+                            onClick={() => handleTitleMatch(m)}
+                          >
+                            <span className="font-medium">{m.title}</span>
+                            {m.year && <span className="text-muted-foreground">({m.year})</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex flex-wrap gap-2">
-                    {quickPick.map((m) => (
-                      <Button
-                        key={m.id}
-                        variant="secondary"
-                        size="sm"
-                        className="rounded-full"
-                        data-testid={`button-quick-${m.id}`}
-                        onClick={() => setTitle(m.title)}
-                      >
-                        {m.title}
-                      </Button>
-                    ))}
+                    {mediaLoading ? (
+                      <span className="text-xs text-muted-foreground">Loading…</span>
+                    ) : (
+                      quickPick.map((m: any) => (
+                        <Button
+                          key={m.id}
+                          variant="secondary"
+                          size="sm"
+                          className="rounded-full"
+                          data-testid={`button-quick-${m.id}`}
+                          onClick={() => handleQuickPick(m)}
+                        >
+                          {m.title}
+                        </Button>
+                      ))
+                    )}
                   </div>
                 </div>
 
@@ -257,13 +304,10 @@ export default function ReviewCreate() {
                   <Button
                     className="rounded-xl"
                     data-testid="button-publish"
-                    onClick={() => {
-                      setTitle("");
-                      setText("");
-                      setRating(4);
-                    }}
+                    disabled={!canPublish}
+                    onClick={handlePublish}
                   >
-                    Publish
+                    {publishMutation.isPending ? "Publishing…" : "Publish"}
                   </Button>
                 </div>
               </div>
@@ -278,7 +322,7 @@ export default function ReviewCreate() {
                     Preview
                   </div>
                   <div className="text-xs text-muted-foreground" data-testid="text-preview-subtitle">
-                    How it’ll look in the feed.
+                    How it'll look in the feed.
                   </div>
                 </div>
                 <Badge variant="secondary" className="rounded-full" data-testid="badge-live">
@@ -314,7 +358,7 @@ export default function ReviewCreate() {
                 A quick rubric
               </div>
               <p className="mt-2 text-sm text-muted-foreground" data-testid="text-guidelines-body">
-                Great reviews are: (1) a feeling, (2) one detail, (3) one sentence you’ll remember.
+                Great reviews are: (1) a feeling, (2) one detail, (3) one sentence you'll remember.
               </p>
               <Separator className="my-4" />
               <div className="grid gap-2 text-sm">

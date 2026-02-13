@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import {
   ArrowLeft,
   BookOpen,
@@ -21,55 +23,6 @@ import { cn } from "@/lib/utils";
 
 type MediaType = "movie" | "anime" | "book" | "tv";
 
-type WatchItem = {
-  id: string;
-  type: MediaType;
-  title: string;
-  creator?: string;
-  year?: string;
-  coverGradient: string;
-  tags: string[];
-};
-
-const seed: WatchItem[] = [
-  {
-    id: "m7",
-    type: "tv",
-    title: "Severance",
-    year: "2022",
-    creator: "Dan Erickson",
-    coverGradient: "from-sky-500/20 via-cyan-500/10 to-emerald-500/10",
-    tags: ["mystery", "work", "dread"],
-  },
-  {
-    id: "m8",
-    type: "anime",
-    title: "Ping Pong",
-    year: "2014",
-    creator: "Masaaki Yuasa",
-    coverGradient: "from-lime-500/20 via-amber-500/10 to-rose-500/10",
-    tags: ["sports", "artstyle", "heart"],
-  },
-  {
-    id: "m9",
-    type: "movie",
-    title: "Aftersun",
-    year: "2022",
-    creator: "Charlotte Wells",
-    coverGradient: "from-amber-500/20 via-rose-500/10 to-sky-500/10",
-    tags: ["memory", "tender", "sun"],
-  },
-  {
-    id: "m10",
-    type: "book",
-    title: "The Dispossessed",
-    year: "1974",
-    creator: "Ursula K. Le Guin",
-    coverGradient: "from-indigo-500/20 via-sky-500/10 to-emerald-500/10",
-    tags: ["utopia", "anarchy", "twin"],
-  },
-];
-
 function iconFor(type: MediaType) {
   switch (type) {
     case "movie":
@@ -86,12 +39,38 @@ function iconFor(type: MediaType) {
 export default function Watchlist() {
   const [activeTab, setActiveTab] = useState<MediaType | "all">("all");
   const [done, setDone] = useState<Record<string, boolean>>({});
-  const [items, setItems] = useState(seed);
+  const queryClient = useQueryClient();
+
+  const { data: currentUser } = useQuery<any>({
+    queryKey: ["/api/users/username/alice"],
+  });
+
+  const { data: items = [], isLoading } = useQuery<any[]>({
+    queryKey: [`/api/users/${currentUser?.id}/watchlist`],
+    enabled: !!currentUser?.id,
+  });
+
+  const removeFromWatchlist = useMutation({
+    mutationFn: async (mediaId: string) => {
+      await apiRequest("DELETE", `/api/users/${currentUser.id}/watchlist/${mediaId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/users/${currentUser.id}/watchlist`] });
+    },
+  });
 
   const filtered = useMemo(() => {
     if (activeTab === "all") return items;
-    return items.filter((i) => i.type === activeTab);
+    return items.filter((i: any) => i.type === activeTab);
   }, [items, activeTab]);
+
+  if (isLoading || !currentUser) {
+    return (
+      <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30 flex items-center justify-center">
+        <div className="text-muted-foreground" data-testid="loading-watchlist">Loading…</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30">
@@ -179,8 +158,8 @@ export default function Watchlist() {
             <Separator className="my-5" />
 
             <div className="grid gap-3">
-              {filtered.map((it) => {
-                const Icon = iconFor(it.type);
+              {filtered.map((it: any) => {
+                const Icon = iconFor(it.type as MediaType);
                 const isDone = !!done[it.id];
                 return (
                   <Card
@@ -226,7 +205,7 @@ export default function Watchlist() {
                         </div>
 
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          {it.tags.slice(0, 3).map((t) => (
+                          {(it.tags ?? []).slice(0, 3).map((t: string) => (
                             <Badge
                               key={t}
                               variant="secondary"
@@ -254,7 +233,7 @@ export default function Watchlist() {
                             variant="ghost"
                             className="rounded-xl"
                             data-testid={`button-remove-${it.id}`}
-                            onClick={() => setItems((p) => p.filter((x) => x.id !== it.id))}
+                            onClick={() => removeFromWatchlist.mutate(it.id)}
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
                             Remove

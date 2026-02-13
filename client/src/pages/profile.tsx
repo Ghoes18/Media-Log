@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import { motion } from "framer-motion";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import {
   ArrowLeft,
   BookOpen,
@@ -21,92 +22,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-type MediaType = "movie" | "anime" | "book" | "tv";
-
-type Media = {
-  id: string;
-  type: MediaType;
-  title: string;
-  creator?: string;
-  year?: string;
-  coverGradient: string;
-};
-
-type Activity = {
-  id: string;
-  kind: "review" | "like" | "watchlist";
-  when: string;
-  blurb: string;
-  media: Media;
-};
-
-const favoritesSeed: Media[] = [
-  {
-    id: "m5",
-    type: "movie",
-    title: "Spirited Away",
-    year: "2001",
-    creator: "Hayao Miyazaki",
-    coverGradient: "from-emerald-500/25 via-cyan-500/15 to-violet-500/15",
-  },
-  {
-    id: "m2",
-    type: "anime",
-    title: "Cowboy Bebop",
-    year: "1998",
-    creator: "Shinichirō Watanabe",
-    coverGradient: "from-orange-500/25 via-rose-500/15 to-sky-500/15",
-  },
-  {
-    id: "m3",
-    type: "book",
-    title: "The Left Hand of Darkness",
-    year: "1969",
-    creator: "Ursula K. Le Guin",
-    coverGradient: "from-sky-500/20 via-indigo-500/15 to-emerald-500/15",
-  },
-  {
-    id: "m4",
-    type: "tv",
-    title: "The Bear",
-    year: "2022",
-    creator: "Christopher Storer",
-    coverGradient: "from-emerald-500/20 via-teal-500/15 to-amber-500/15",
-  },
-];
-
-const activitySeed: Activity[] = [
-  {
-    id: "a1",
-    kind: "review",
-    when: "Today",
-    blurb: "Reviewed Cowboy Bebop · 5★",
-    media: favoritesSeed[1],
-  },
-  {
-    id: "a2",
-    kind: "watchlist",
-    when: "Yesterday",
-    blurb: "Added Severance to watchlist",
-    media: {
-      id: "m7",
-      type: "tv",
-      title: "Severance",
-      year: "2022",
-      creator: "Dan Erickson",
-      coverGradient: "from-sky-500/20 via-cyan-500/10 to-emerald-500/10",
-    },
-  },
-  {
-    id: "a3",
-    kind: "like",
-    when: "2d",
-    blurb: "Liked Luna’s review of The Left Hand of Darkness",
-    media: favoritesSeed[2],
-  },
-];
-
-function iconFor(type: MediaType) {
+function iconFor(type: string) {
   switch (type) {
     case "movie":
       return Film;
@@ -116,34 +32,108 @@ function iconFor(type: MediaType) {
       return BookOpen;
     case "tv":
       return Tv2;
+    default:
+      return Film;
   }
+}
+
+function timeAgo(dateStr: string) {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return `${diffDays}d`;
+  return date.toLocaleDateString();
 }
 
 export default function Profile() {
   const params = useParams<{ handle: string }>();
-  const handle = params.handle ?? "you";
+  const handle = params.handle ?? "alice";
+  const queryClient = useQueryClient();
 
-  const isMe = handle === "you";
+  const isMe = handle === "alice";
 
-  const [following, setFollowing] = useState(!isMe);
+  const { data: currentUser } = useQuery<any>({
+    queryKey: ["/api/users/username/alice"],
+    enabled: !isMe,
+  });
 
-  const profile = useMemo(() => {
-    const name = isMe ? "You" : handle.slice(0, 1).toUpperCase() + handle.slice(1);
-    const bio = isMe
-      ? "Writing small reviews like postcards. Mostly sci-fi, quiet dramas, and books that change your brain."
-      : "Taste: neon, tenderness, and slightly unhinged TV seasons.";
+  const { data: profileUser, isLoading: profileLoading } = useQuery<any>({
+    queryKey: [`/api/users/username/${handle}`],
+  });
 
-    return {
-      handle,
-      name,
-      bio,
-      stats: {
-        reviews: isMe ? 38 : 121,
-        followers: isMe ? 214 : 845,
-        following: isMe ? 119 : 92,
-      },
-    };
-  }, [handle, isMe]);
+  const userId = profileUser?.id;
+  const currentUserId = isMe ? userId : currentUser?.id;
+
+  const { data: favorites = [], isLoading: favoritesLoading } = useQuery<any[]>({
+    queryKey: [`/api/users/${userId}/favorites`],
+    enabled: !!userId,
+  });
+
+  const { data: userReviews = [], isLoading: reviewsLoading } = useQuery<any[]>({
+    queryKey: [`/api/users/${userId}/reviews`],
+    enabled: !!userId,
+  });
+
+  const { data: watchlistItems = [], isLoading: watchlistLoading } = useQuery<any[]>({
+    queryKey: [`/api/users/${userId}/watchlist`],
+    enabled: !!userId,
+  });
+
+  const { data: followingStatus } = useQuery<{ following: boolean }>({
+    queryKey: [`/api/users/${currentUserId}/following/${userId}`],
+    enabled: !!currentUserId && !!userId && !isMe,
+  });
+
+  const following = followingStatus?.following ?? false;
+
+  const followMutation = useMutation({
+    mutationFn: async () => {
+      if (following) {
+        await apiRequest("DELETE", `/api/users/${currentUserId}/follow/${userId}`);
+      } else {
+        await apiRequest("POST", `/api/users/${currentUserId}/follow/${userId}`);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/users/${currentUserId}/following/${userId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/users/username/${handle}`] });
+    },
+  });
+
+  if (profileLoading) {
+    return (
+      <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30 flex items-center justify-center">
+        <div className="text-muted-foreground">Loading profile…</div>
+      </div>
+    );
+  }
+
+  if (!profileUser) {
+    return (
+      <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30 flex items-center justify-center">
+        <div className="text-muted-foreground">User not found</div>
+      </div>
+    );
+  }
+
+  const profile = {
+    handle: profileUser.username,
+    name: profileUser.displayName,
+    bio: profileUser.bio || "",
+    avatarUrl: profileUser.avatarUrl || "",
+    stats: {
+      reviews: profileUser.reviews ?? 0,
+      followers: profileUser.followers ?? 0,
+      following: profileUser.following ?? 0,
+    },
+  };
 
   return (
     <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30">
@@ -195,7 +185,7 @@ export default function Profile() {
                 className="h-10 rounded-xl"
                 variant={following ? "secondary" : "default"}
                 data-testid="button-follow"
-                onClick={() => setFollowing((v) => !v)}
+                onClick={() => followMutation.mutate()}
               >
                 <span className="sm:hidden" data-testid="text-follow-compact">
                   {following ? "Following" : "Follow"}
@@ -248,7 +238,7 @@ export default function Profile() {
             <Card className="glass bg-noise rounded-3xl p-5 sm:p-7 min-w-0" data-testid="card-profile-header">
               <div className="flex items-start gap-4">
                 <Avatar className="h-14 w-14 shrink-0 ring-1 ring-border" data-testid="avatar-profile">
-                  <AvatarImage alt={profile.name} src="" />
+                  <AvatarImage alt={profile.name} src={profile.avatarUrl} />
                   <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
                     {profile.name.slice(0, 1)}
                   </AvatarFallback>
@@ -309,27 +299,33 @@ export default function Profile() {
 
               <Separator className="my-4" />
 
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                {favoritesSeed.map((m) => {
-                  const Icon = iconFor(m.type);
-                  return (
-                    <Link
-                      key={m.id}
-                      href={`/m/${m.id}`}
-                      data-testid={`link-favorite-${m.id}`}
-                      className="group"
-                    >
-                      <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-                        <div className={cn("relative aspect-[3/4] bg-gradient-to-br", m.coverGradient)}>
-                          <div className="absolute left-2 top-2 rounded-full bg-black/35 p-1 ring-1 ring-white/15">
-                            <Icon className="h-3.5 w-3.5 text-white" strokeWidth={2} />
+              {favoritesLoading ? (
+                <div className="text-sm text-muted-foreground py-4 text-center">Loading favorites…</div>
+              ) : favorites.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-4 text-center">No favorites yet.</div>
+              ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {favorites.map((m: any) => {
+                    const Icon = iconFor(m.type);
+                    return (
+                      <Link
+                        key={m.id}
+                        href={`/m/${m.id}`}
+                        data-testid={`link-favorite-${m.id}`}
+                        className="group"
+                      >
+                        <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+                          <div className={cn("relative aspect-[3/4] bg-gradient-to-br", m.coverGradient)}>
+                            <div className="absolute left-2 top-2 rounded-full bg-black/35 p-1 ring-1 ring-white/15">
+                              <Icon className="h-3.5 w-3.5 text-white" strokeWidth={2} />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
             </Card>
 
             <Card className="glass bg-noise rounded-3xl p-5 sm:p-7 overflow-hidden" data-testid="card-watchlist">
@@ -353,18 +349,24 @@ export default function Profile() {
 
               <Separator className="my-4" />
 
-              <div className="grid grid-cols-2 gap-2">
-                {["m7", "m8", "m9", "m10"].map((id) => (
-                  <Link
-                    key={id}
-                    href={`/m/${id}`}
-                    data-testid={`link-watch-${id}`}
-                    className="rounded-2xl border bg-card/60 px-3 py-2 text-sm font-medium hover:bg-card/80 transition"
-                  >
-                    {id}
-                  </Link>
-                ))}
-              </div>
+              {watchlistLoading ? (
+                <div className="text-sm text-muted-foreground py-4 text-center">Loading watchlist…</div>
+              ) : watchlistItems.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-4 text-center">Watchlist is empty.</div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {watchlistItems.map((m: any) => (
+                    <Link
+                      key={m.id}
+                      href={`/m/${m.id}`}
+                      data-testid={`link-watch-${m.id}`}
+                      className="rounded-2xl border bg-card/60 px-3 py-2 text-sm font-medium hover:bg-card/80 transition"
+                    >
+                      {m.title}
+                    </Link>
+                  ))}
+                </div>
+              )}
             </Card>
           </section>
 
@@ -386,36 +388,42 @@ export default function Profile() {
 
               <Separator className="my-4" />
 
-              <div className="space-y-3">
-                {activitySeed.map((a) => (
-                  <Link key={a.id} href={`/m/${a.media.id}`} data-testid={`link-activity-${a.id}`}>
-                    <Card className="rounded-3xl border bg-card/60 p-4 hover:bg-card/80 transition">
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={cn(
-                            "h-12 w-10 shrink-0 overflow-hidden rounded-2xl border bg-card shadow-sm",
-                          )}
-                        >
-                          <div className={cn("h-full w-full bg-gradient-to-br", a.media.coverGradient)} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="truncate text-sm font-semibold" data-testid={`text-activity-blurb-${a.id}`}>
-                              {a.blurb}
+              {reviewsLoading ? (
+                <div className="text-sm text-muted-foreground py-4 text-center">Loading activity…</div>
+              ) : userReviews.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-4 text-center">No activity yet.</div>
+              ) : (
+                <div className="space-y-3">
+                  {userReviews.map((r: any) => (
+                    <Link key={r.id} href={`/m/${r.media?.id ?? r.mediaId}`} data-testid={`link-activity-${r.id}`}>
+                      <Card className="rounded-3xl border bg-card/60 p-4 hover:bg-card/80 transition">
+                        <div className="flex items-start gap-3">
+                          <div
+                            className={cn(
+                              "h-12 w-10 shrink-0 overflow-hidden rounded-2xl border bg-card shadow-sm",
+                            )}
+                          >
+                            <div className={cn("h-full w-full bg-gradient-to-br", r.media?.coverGradient ?? "")} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="truncate text-sm font-semibold" data-testid={`text-activity-blurb-${r.id}`}>
+                                Reviewed {r.media?.title ?? "Unknown"} · {r.rating}★
+                              </div>
+                              <div className="text-xs text-muted-foreground" data-testid={`text-activity-when-${r.id}`}>
+                                {timeAgo(r.createdAt)}
+                              </div>
                             </div>
-                            <div className="text-xs text-muted-foreground" data-testid={`text-activity-when-${a.id}`}>
-                              {a.when}
+                            <div className="mt-1 truncate text-xs text-muted-foreground" data-testid={`text-activity-title-${r.id}`}>
+                              {r.media?.title ?? "Unknown"}
                             </div>
                           </div>
-                          <div className="mt-1 truncate text-xs text-muted-foreground" data-testid={`text-activity-title-${a.id}`}>
-                            {a.media.title}
-                          </div>
                         </div>
-                      </div>
-                    </Card>
-                  </Link>
-                ))}
-              </div>
+                      </Card>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </Card>
           </section>
         </motion.div>

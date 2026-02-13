@@ -11,6 +11,8 @@ import {
   Star,
   Tv2,
 } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -32,126 +34,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 type MediaType = "movie" | "anime" | "book" | "tv";
-
-type Media = {
-  id: string;
-  type: MediaType;
-  title: string;
-  year?: string;
-  creator?: string;
-  coverGradient: string;
-  ratingAvg: number;
-  tags: string[];
-};
-
-type Review = {
-  id: string;
-  mediaId: string;
-  author: {
-    handle: string;
-    name: string;
-    avatar?: string;
-  };
-  rating: number;
-  text: string;
-  likedByMe?: boolean;
-  likes: number;
-  createdAtLabel: string;
-};
-
-const mediaSeed: Media[] = [
-  {
-    id: "m1",
-    type: "movie",
-    title: "Blade Runner 2049",
-    year: "2017",
-    creator: "Denis Villeneuve",
-    coverGradient: "from-violet-500/30 via-fuchsia-500/20 to-emerald-400/20",
-    ratingAvg: 4.3,
-    tags: ["neo-noir", "sci-fi", "mood"],
-  },
-  {
-    id: "m2",
-    type: "anime",
-    title: "Cowboy Bebop",
-    year: "1998",
-    creator: "Shinichirō Watanabe",
-    coverGradient: "from-orange-500/25 via-rose-500/15 to-sky-500/15",
-    ratingAvg: 4.6,
-    tags: ["space", "jazz", "classic"],
-  },
-  {
-    id: "m3",
-    type: "book",
-    title: "The Left Hand of Darkness",
-    year: "1969",
-    creator: "Ursula K. Le Guin",
-    coverGradient: "from-sky-500/20 via-indigo-500/15 to-emerald-500/15",
-    ratingAvg: 4.4,
-    tags: ["speculative", "politics", "ice"],
-  },
-  {
-    id: "m4",
-    type: "tv",
-    title: "The Bear",
-    year: "2022",
-    creator: "Christopher Storer",
-    coverGradient: "from-emerald-500/20 via-teal-500/15 to-amber-500/15",
-    ratingAvg: 4.1,
-    tags: ["chaos", "kitchen", "hearts"],
-  },
-  {
-    id: "m5",
-    type: "movie",
-    title: "Spirited Away",
-    year: "2001",
-    creator: "Hayao Miyazaki",
-    coverGradient: "from-emerald-500/25 via-cyan-500/15 to-violet-500/15",
-    ratingAvg: 4.7,
-    tags: ["wonder", "myth", "coming-of-age"],
-  },
-  {
-    id: "m6",
-    type: "book",
-    title: "Pachinko",
-    year: "2017",
-    creator: "Min Jin Lee",
-    coverGradient: "from-rose-500/25 via-amber-500/10 to-emerald-500/10",
-    ratingAvg: 4.2,
-    tags: ["family", "history", "diaspora"],
-  },
-];
-
-const reviewSeed: Review[] = [
-  {
-    id: "r1",
-    mediaId: "m2",
-    author: { handle: "luna", name: "Luna Park" },
-    rating: 5,
-    text: "Every episode feels like a different genre postcard — and the quiet ending still hits like a sigh.",
-    likedByMe: true,
-    likes: 92,
-    createdAtLabel: "Today",
-  },
-  {
-    id: "r2",
-    mediaId: "m3",
-    author: { handle: "mori", name: "Mori" },
-    rating: 4,
-    text: "A book that makes you re-parse every assumption you didn’t know you had. Cold world, warm people.",
-    likes: 41,
-    createdAtLabel: "Yesterday",
-  },
-  {
-    id: "r3",
-    mediaId: "m1",
-    author: { handle: "kaito", name: "Kaito" },
-    rating: 4.5,
-    text: "You can feel the weight of time in the neon. Not perfection, but a mood I keep returning to.",
-    likes: 58,
-    createdAtLabel: "2d",
-  },
-];
 
 function mediaIcon(type: MediaType) {
   switch (type) {
@@ -199,8 +81,9 @@ function Stars({ value }: { value: number }) {
   );
 }
 
-function Cover({ m }: { m: Media }) {
-  const Icon = mediaIcon(m.type);
+function Cover({ m }: { m: any }) {
+  const Icon = mediaIcon(m.type as MediaType);
+  const displayRating = m.rating ? parseFloat(m.rating) : null;
   return (
     <div
       className={cn(
@@ -224,10 +107,12 @@ function Cover({ m }: { m: Media }) {
             {m.creator}
             {m.year ? ` · ${m.year}` : ""}
           </div>
-          <div className="flex items-center gap-1 rounded-full bg-black/35 px-2 py-1 text-xs text-white ring-1 ring-white/15">
-            <Star className="h-3.5 w-3.5 fill-white/90 text-white/90" />
-            {m.ratingAvg.toFixed(1)}
-          </div>
+          {displayRating !== null && (
+            <div className="flex items-center gap-1 rounded-full bg-black/35 px-2 py-1 text-xs text-white ring-1 ring-white/15">
+              <Star className="h-3.5 w-3.5 fill-white/90 text-white/90" />
+              {displayRating.toFixed(1)}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -237,9 +122,11 @@ function Cover({ m }: { m: Media }) {
 function TopNav({
   query,
   setQuery,
+  currentUser,
 }: {
   query: string;
   setQuery: (v: string) => void;
+  currentUser: any;
 }) {
   return (
     <div className="sticky top-0 z-40 border-b bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
@@ -310,10 +197,12 @@ function TopNav({
             </SheetContent>
           </Sheet>
 
-          <Link href="/u/you" data-testid="link-profile" className="grid place-items-center">
+          <Link href={`/u/${currentUser?.username ?? "alice"}`} data-testid="link-profile" className="grid place-items-center">
             <Avatar className="h-9 w-9 ring-1 ring-border" data-testid="avatar-you">
-              <AvatarImage alt="You" src="" />
-              <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">Y</AvatarFallback>
+              <AvatarImage alt={currentUser?.displayName ?? "You"} src={currentUser?.avatarUrl ?? ""} />
+              <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
+                {(currentUser?.displayName ?? "A").slice(0, 1)}
+              </AvatarFallback>
             </Avatar>
           </Link>
         </div>
@@ -322,37 +211,81 @@ function TopNav({
   );
 }
 
+function relativeTime(dateStr: string) {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diffMs = now.getTime() - date.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHr / 24);
+
+  if (diffDay > 7) return date.toLocaleDateString();
+  if (diffDay >= 1) return `${diffDay}d`;
+  if (diffHr >= 1) return `${diffHr}h`;
+  if (diffMin >= 1) return `${diffMin}m`;
+  return "Just now";
+}
+
 export default function Home() {
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<MediaType | "all">("all");
-  const [liked, setLiked] = useState<Record<string, boolean>>(() => {
-    const map: Record<string, boolean> = {};
-    for (const r of reviewSeed) map[r.id] = !!r.likedByMe;
-    return map;
+  const queryClient = useQueryClient();
+
+  const { data: currentUser } = useQuery<any>({
+    queryKey: ["/api/users/username/alice"],
+  });
+
+  const { data: mediaData = [], isLoading: mediaLoading } = useQuery<any[]>({
+    queryKey: ["/api/media", activeTab],
+    queryFn: () =>
+      fetch(activeTab === "all" ? "/api/media" : `/api/media?type=${activeTab}`).then((r) =>
+        r.json(),
+      ),
+  });
+
+  const { data: reviewsData = [], isLoading: reviewsLoading } = useQuery<any[]>({
+    queryKey: ["/api/reviews/recent"],
+  });
+
+  const [likedMap, setLikedMap] = useState<Record<string, boolean>>({});
+
+  const likeMutation = useMutation({
+    mutationFn: async ({ reviewId, liked }: { reviewId: string; liked: boolean }) => {
+      if (liked) {
+        await apiRequest("DELETE", `/api/reviews/${reviewId}/like`, {
+          userId: currentUser?.id,
+        });
+      } else {
+        await apiRequest("POST", `/api/reviews/${reviewId}/like`, {
+          userId: currentUser?.id,
+        });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/reviews/recent"] });
+    },
   });
 
   const media = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const filtered = q
-      ? mediaSeed.filter((m) =>
-          [m.title, m.creator, m.year].some((v) =>
-            (v ?? "").toLowerCase().includes(q),
-          ),
-        )
-      : mediaSeed;
+    if (!q) return mediaData;
+    return mediaData.filter((m: any) =>
+      [m.title, m.creator, m.year].some((v) =>
+        (v ?? "").toLowerCase().includes(q),
+      ),
+    );
+  }, [query, mediaData]);
 
-    if (activeTab === "all") return filtered;
-    return filtered.filter((m) => m.type === activeTab);
-  }, [query, activeTab]);
-
-  const reviews = useMemo(() => {
-    const byId = new Map(mediaSeed.map((m) => [m.id, m] as const));
-    return reviewSeed.map((r) => ({ r, m: byId.get(r.mediaId)! }));
-  }, []);
+  const toggleLike = (reviewId: string) => {
+    const currentlyLiked = likedMap[reviewId] ?? false;
+    setLikedMap((p) => ({ ...p, [reviewId]: !currentlyLiked }));
+    likeMutation.mutate({ reviewId, liked: currentlyLiked });
+  };
 
   return (
     <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30">
-      <TopNav query={query} setQuery={setQuery} />
+      <TopNav query={query} setQuery={setQuery} currentUser={currentUser} />
 
       <main className="mx-auto max-w-6xl px-4 pb-24 pt-6">
         <motion.div
@@ -449,34 +382,43 @@ export default function Home() {
               </div>
 
               <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3">
-                {media.slice(0, 6).map((m) => (
-                  <Link
-                    key={m.id}
-                    href={`/m/${m.id}`}
-                    data-testid={`link-media-${m.id}`}
-                    className="group"
-                  >
-                    <motion.div
-                      whileHover={{ y: -4 }}
-                      transition={{ duration: 0.2 }}
-                      className="rounded-2xl"
+                {mediaLoading ? (
+                  Array.from({ length: 6 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="aspect-[3/4] animate-pulse rounded-xl bg-muted/50"
+                    />
+                  ))
+                ) : (
+                  media.slice(0, 6).map((m: any) => (
+                    <Link
+                      key={m.id}
+                      href={`/m/${m.id}`}
+                      data-testid={`link-media-${m.id}`}
+                      className="group"
                     >
-                      <Cover m={m} />
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        {m.tags.slice(0, 3).map((t) => (
-                          <Badge
-                            key={t}
-                            variant="secondary"
-                            className="rounded-full"
-                            data-testid={`badge-tag-${m.id}-${t}`}
-                          >
-                            {t}
-                          </Badge>
-                        ))}
-                      </div>
-                    </motion.div>
-                  </Link>
-                ))}
+                      <motion.div
+                        whileHover={{ y: -4 }}
+                        transition={{ duration: 0.2 }}
+                        className="rounded-2xl"
+                      >
+                        <Cover m={m} />
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          {(m.tags ?? []).slice(0, 3).map((t: string) => (
+                            <Badge
+                              key={t}
+                              variant="secondary"
+                              className="rounded-full"
+                              data-testid={`badge-tag-${m.id}-${t}`}
+                            >
+                              {t}
+                            </Badge>
+                          ))}
+                        </div>
+                      </motion.div>
+                    </Link>
+                  ))
+                )}
               </div>
             </div>
 
@@ -495,103 +437,116 @@ export default function Home() {
               </div>
 
               <div className="mt-3 grid gap-3">
-                {reviews.map(({ r, m }) => (
-                  <Card
-                    key={r.id}
-                    className="glass bg-noise rounded-3xl p-4 sm:p-5"
-                    data-testid={`card-review-${r.id}`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <Link href={`/u/${r.author.handle}`} data-testid={`link-author-${r.id}`}>
-                        <Avatar className="h-10 w-10 ring-1 ring-border" data-testid={`avatar-author-${r.id}`}>
-                          <AvatarImage alt={r.author.name} src={r.author.avatar ?? ""} />
-                          <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
-                            {r.author.name.slice(0, 1)}
-                          </AvatarFallback>
-                        </Avatar>
-                      </Link>
+                {reviewsLoading ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="h-32 animate-pulse rounded-3xl bg-muted/50"
+                    />
+                  ))
+                ) : (
+                  reviewsData.map((r: any) => {
+                    const isLiked = likedMap[r.id] ?? false;
+                    const likeCount = r.likeCount + (isLiked ? 1 : 0);
+                    return (
+                      <Card
+                        key={r.id}
+                        className="glass bg-noise rounded-3xl p-4 sm:p-5"
+                        data-testid={`card-review-${r.id}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <Link href={`/u/${r.user.username}`} data-testid={`link-author-${r.id}`}>
+                            <Avatar className="h-10 w-10 ring-1 ring-border" data-testid={`avatar-author-${r.id}`}>
+                              <AvatarImage alt={r.user.displayName} src={r.user.avatarUrl ?? ""} />
+                              <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
+                                {r.user.displayName.slice(0, 1)}
+                              </AvatarFallback>
+                            </Avatar>
+                          </Link>
 
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <Link
-                                href={`/u/${r.author.handle}`}
-                                data-testid={`link-handle-${r.id}`}
-                                className="truncate text-sm font-semibold hover:opacity-80"
-                              >
-                                {r.author.name}
-                              </Link>
-                              <span
-                                className="text-xs text-muted-foreground"
-                                data-testid={`text-time-${r.id}`}
-                              >
-                                {r.createdAtLabel}
-                              </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <Link
+                                    href={`/u/${r.user.username}`}
+                                    data-testid={`link-handle-${r.id}`}
+                                    className="truncate text-sm font-semibold hover:opacity-80"
+                                  >
+                                    {r.user.displayName}
+                                  </Link>
+                                  <span
+                                    className="text-xs text-muted-foreground"
+                                    data-testid={`text-time-${r.id}`}
+                                  >
+                                    {relativeTime(r.createdAt)}
+                                  </span>
+                                </div>
+                                <Link
+                                  href={`/m/${r.media.id}`}
+                                  data-testid={`link-reviewed-${r.id}`}
+                                  className="mt-0.5 block truncate text-sm text-muted-foreground hover:text-foreground"
+                                >
+                                  reviewed <span className="font-medium text-foreground">{r.media.title}</span>
+                                </Link>
+                              </div>
+                              <Stars value={r.rating} />
                             </div>
-                            <Link
-                              href={`/m/${m.id}`}
-                              data-testid={`link-reviewed-${r.id}`}
-                              className="mt-0.5 block truncate text-sm text-muted-foreground hover:text-foreground"
+
+                            <p
+                              className="mt-2 text-sm leading-relaxed text-foreground/90"
+                              data-testid={`text-review-${r.id}`}
                             >
-                              reviewed <span className="font-medium text-foreground">{m.title}</span>
-                            </Link>
+                              {r.body}
+                            </p>
+
+                            <div className="mt-3 flex items-center gap-2">
+                              <Button
+                                variant={isLiked ? "default" : "secondary"}
+                                size="sm"
+                                className={cn(
+                                  "rounded-xl",
+                                  isLiked && "bg-primary/20 text-foreground border border-border",
+                                )}
+                                onClick={() => toggleLike(r.id)}
+                                data-testid={`button-like-${r.id}`}
+                              >
+                                <Heart
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    isLiked
+                                      ? "fill-primary text-primary"
+                                      : "text-muted-foreground",
+                                  )}
+                                  strokeWidth={2}
+                                />
+                                {isLiked ? "Liked" : "Like"}
+                                <span
+                                  className="ml-2 rounded-full bg-black/5 px-2 py-0.5 text-xs dark:bg-white/10"
+                                  data-testid={`text-likes-${r.id}`}
+                                >
+                                  {likeCount}
+                                </span>
+                              </Button>
+
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="rounded-xl"
+                                data-testid={`button-open-${r.id}`}
+                                asChild
+                              >
+                                <Link href={`/m/${r.media.id}`} data-testid={`link-open-${r.id}`}>
+                                  Open
+                                </Link>
+                              </Button>
+                            </div>
                           </div>
-                          <Stars value={r.rating} />
                         </div>
-
-                        <p
-                          className="mt-2 text-sm leading-relaxed text-foreground/90"
-                          data-testid={`text-review-${r.id}`}
-                        >
-                          {r.text}
-                        </p>
-
-                        <div className="mt-3 flex items-center gap-2">
-                          <Button
-                            variant={liked[r.id] ? "default" : "secondary"}
-                            size="sm"
-                            className={cn(
-                              "rounded-xl",
-                              liked[r.id] && "bg-primary/20 text-foreground border border-border",
-                            )}
-                            onClick={() => setLiked((p) => ({ ...p, [r.id]: !p[r.id] }))}
-                            data-testid={`button-like-${r.id}`}
-                          >
-                            <Heart
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                liked[r.id]
-                                  ? "fill-primary text-primary"
-                                  : "text-muted-foreground",
-                              )}
-                              strokeWidth={2}
-                            />
-                            {liked[r.id] ? "Liked" : "Like"}
-                            <span
-                              className="ml-2 rounded-full bg-black/5 px-2 py-0.5 text-xs dark:bg-white/10"
-                              data-testid={`text-likes-${r.id}`}
-                            >
-                              {r.likes + (liked[r.id] && !r.likedByMe ? 1 : 0)}
-                            </span>
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="rounded-xl"
-                            data-testid={`button-open-${r.id}`}
-                            asChild
-                          >
-                            <Link href={`/m/${m.id}`} data-testid={`link-open-${r.id}`}>
-                              Open
-                            </Link>
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
+                      </Card>
+                    );
+                  })
+                )}
               </div>
             </div>
           </section>
@@ -600,17 +555,17 @@ export default function Home() {
             <Card className="glass bg-noise rounded-3xl p-5" data-testid="card-profile-preview">
               <div className="flex items-center gap-3">
                 <Avatar className="h-11 w-11 ring-1 ring-border" data-testid="avatar-profile-preview">
-                  <AvatarImage alt="You" src="" />
+                  <AvatarImage alt={currentUser?.displayName ?? "You"} src={currentUser?.avatarUrl ?? ""} />
                   <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
-                    Y
+                    {(currentUser?.displayName ?? "A").slice(0, 1)}
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold" data-testid="text-profile-name">
-                    You
+                    {currentUser?.displayName ?? "..."}
                   </div>
                   <div className="truncate text-xs text-muted-foreground" data-testid="text-profile-handle">
-                    @you
+                    @{currentUser?.username ?? "..."}
                   </div>
                 </div>
                 <div className="ml-auto">
@@ -621,7 +576,7 @@ export default function Home() {
                     data-testid="button-view-profile"
                     asChild
                   >
-                    <Link href="/u/you" data-testid="link-go-profile">
+                    <Link href={`/u/${currentUser?.username ?? "alice"}`} data-testid="link-go-profile">
                       View
                     </Link>
                   </Button>
@@ -633,15 +588,15 @@ export default function Home() {
               <div className="grid grid-cols-3 gap-2">
                 <div className="rounded-2xl border bg-card/60 p-3" data-testid="stat-reviews">
                   <div className="text-xs text-muted-foreground">Reviews</div>
-                  <div className="mt-1 font-serif text-lg font-semibold">38</div>
+                  <div className="mt-1 font-serif text-lg font-semibold">{currentUser?.reviews ?? 0}</div>
                 </div>
                 <div className="rounded-2xl border bg-card/60 p-3" data-testid="stat-followers">
                   <div className="text-xs text-muted-foreground">Followers</div>
-                  <div className="mt-1 font-serif text-lg font-semibold">214</div>
+                  <div className="mt-1 font-serif text-lg font-semibold">{currentUser?.followers ?? 0}</div>
                 </div>
                 <div className="rounded-2xl border bg-card/60 p-3" data-testid="stat-following">
                   <div className="text-xs text-muted-foreground">Following</div>
-                  <div className="mt-1 font-serif text-lg font-semibold">119</div>
+                  <div className="mt-1 font-serif text-lg font-semibold">{currentUser?.following ?? 0}</div>
                 </div>
               </div>
 
@@ -651,7 +606,7 @@ export default function Home() {
                     Your favorites
                   </div>
                   <Link
-                    href="/u/you"
+                    href={`/u/${currentUser?.username ?? "alice"}`}
                     data-testid="link-edit-faves"
                     className="text-xs font-medium text-primary hover:opacity-80"
                   >
@@ -660,7 +615,7 @@ export default function Home() {
                 </div>
 
                 <div className="mt-3 grid grid-cols-4 gap-2">
-                  {mediaSeed.slice(0, 4).map((m) => (
+                  {mediaData.slice(0, 4).map((m: any) => (
                     <Link key={m.id} href={`/m/${m.id}`} data-testid={`link-fave-${m.id}`}>
                       <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
                         <div className={cn("aspect-[3/4] bg-gradient-to-br", m.coverGradient)} />
@@ -694,7 +649,7 @@ export default function Home() {
 
               <ScrollArea className="h-[280px] pr-3" data-testid="scroll-watchlist">
                 <div className="space-y-2">
-                  {mediaSeed.slice(1, 6).map((m) => (
+                  {mediaData.slice(1, 6).map((m: any) => (
                     <Link key={m.id} href={`/m/${m.id}`} data-testid={`row-watchlist-${m.id}`}>
                       <div className="flex items-center gap-3 rounded-2xl border bg-card/60 p-3 hover:bg-card/80 transition">
                         <div className="h-10 w-10 overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -741,7 +696,7 @@ export default function Home() {
             Watchlist
           </Link>
           <Link
-            href="/u/you"
+            href={`/u/${currentUser?.username ?? "alice"}`}
             data-testid="nav-profile"
             className="text-sm font-medium text-muted-foreground hover:text-foreground"
           >

@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
   BookOpen,
@@ -8,6 +9,7 @@ import {
   Filter,
   Film,
   Flame,
+  Loader2,
   Search,
   Star,
   Tv2,
@@ -20,104 +22,11 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import type { Media } from "@shared/schema";
 
 type MediaType = "movie" | "anime" | "book" | "tv";
 
-type Media = {
-  id: string;
-  type: MediaType;
-  title: string;
-  year?: string;
-  creator?: string;
-  coverGradient: string;
-  ratingAvg: number;
-  tags: string[];
-};
-
-const mediaSeed: Media[] = [
-  {
-    id: "m1",
-    type: "movie",
-    title: "Blade Runner 2049",
-    year: "2017",
-    creator: "Denis Villeneuve",
-    coverGradient: "from-violet-500/30 via-fuchsia-500/20 to-emerald-400/20",
-    ratingAvg: 4.3,
-    tags: ["neo-noir", "sci-fi", "mood"],
-  },
-  {
-    id: "m2",
-    type: "anime",
-    title: "Cowboy Bebop",
-    year: "1998",
-    creator: "Shinichirō Watanabe",
-    coverGradient: "from-orange-500/25 via-rose-500/15 to-sky-500/15",
-    ratingAvg: 4.6,
-    tags: ["space", "jazz", "classic"],
-  },
-  {
-    id: "m3",
-    type: "book",
-    title: "The Left Hand of Darkness",
-    year: "1969",
-    creator: "Ursula K. Le Guin",
-    coverGradient: "from-sky-500/20 via-indigo-500/15 to-emerald-500/15",
-    ratingAvg: 4.4,
-    tags: ["speculative", "politics", "ice"],
-  },
-  {
-    id: "m4",
-    type: "tv",
-    title: "The Bear",
-    year: "2022",
-    creator: "Christopher Storer",
-    coverGradient: "from-emerald-500/20 via-teal-500/15 to-amber-500/15",
-    ratingAvg: 4.1,
-    tags: ["chaos", "kitchen", "hearts"],
-  },
-  {
-    id: "m5",
-    type: "movie",
-    title: "Spirited Away",
-    year: "2001",
-    creator: "Hayao Miyazaki",
-    coverGradient: "from-emerald-500/25 via-cyan-500/15 to-violet-500/15",
-    ratingAvg: 4.7,
-    tags: ["wonder", "myth", "coming-of-age"],
-  },
-  {
-    id: "m6",
-    type: "book",
-    title: "Pachinko",
-    year: "2017",
-    creator: "Min Jin Lee",
-    coverGradient: "from-rose-500/25 via-amber-500/10 to-emerald-500/10",
-    ratingAvg: 4.2,
-    tags: ["family", "history", "diaspora"],
-  },
-  {
-    id: "m7",
-    type: "tv",
-    title: "Severance",
-    year: "2022",
-    creator: "Dan Erickson",
-    coverGradient: "from-sky-500/20 via-cyan-500/10 to-emerald-500/10",
-    ratingAvg: 4.5,
-    tags: ["mystery", "work", "dread"],
-  },
-  {
-    id: "m8",
-    type: "anime",
-    title: "Ping Pong",
-    year: "2014",
-    creator: "Masaaki Yuasa",
-    coverGradient: "from-lime-500/20 via-amber-500/10 to-rose-500/10",
-    ratingAvg: 4.4,
-    tags: ["sports", "artstyle", "heart"],
-  },
-];
-
-function mediaIcon(type: MediaType) {
+function mediaIcon(type: string) {
   switch (type) {
     case "movie":
       return Film;
@@ -127,6 +36,8 @@ function mediaIcon(type: MediaType) {
       return BookOpen;
     case "tv":
       return Tv2;
+    default:
+      return Film;
   }
 }
 
@@ -150,17 +61,18 @@ export default function Discover() {
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<MediaType | "all">("all");
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const base = q
-      ? mediaSeed.filter((m) =>
-          [m.title, m.creator, m.year].some((v) => (v ?? "").toLowerCase().includes(q)),
-        )
-      : mediaSeed;
-
-    if (activeTab === "all") return base;
-    return base.filter((m) => m.type === activeTab);
-  }, [query, activeTab]);
+  const { data: mediaItems = [], isLoading } = useQuery<Media[]>({
+    queryKey: ["/api/media", activeTab, query],
+    queryFn: () => {
+      let url = "/api/media";
+      const params = new URLSearchParams();
+      if (activeTab !== "all") params.set("type", activeTab);
+      if (query.trim()) params.set("search", query.trim());
+      const qs = params.toString();
+      if (qs) url += "?" + qs;
+      return fetch(url).then((r) => r.json());
+    },
+  });
 
   return (
     <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30">
@@ -267,49 +179,56 @@ export default function Discover() {
                 Results
               </h3>
               <div className="text-sm text-muted-foreground" data-testid="text-results-count">
-                {filtered.length} items
+                {isLoading ? "…" : `${mediaItems.length} items`}
               </div>
             </div>
 
-            <div className="mt-3 grid gap-3">
-              {filtered.map((m) => (
-                <Link key={m.id} href={`/m/${m.id}`} data-testid={`link-result-${m.id}`} className="block">
-                    <Card className="glass bg-noise rounded-3xl p-4 sm:p-5 hover:opacity-[0.98] transition">
-                      <div className="flex items-center gap-4">
-                        <CoverMini m={m} />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="truncate text-sm font-semibold" data-testid={`text-title-${m.id}`}>
-                                {m.title}
+            {isLoading ? (
+              <div className="mt-8 flex items-center justify-center gap-2 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="text-sm">Loading…</span>
+              </div>
+            ) : (
+              <div className="mt-3 grid gap-3">
+                {mediaItems.map((m) => (
+                  <Link key={m.id} href={`/m/${m.id}`} data-testid={`link-result-${m.id}`} className="block">
+                      <Card className="glass bg-noise rounded-3xl p-4 sm:p-5 hover:opacity-[0.98] transition">
+                        <div className="flex items-center gap-4">
+                          <CoverMini m={m} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-semibold" data-testid={`text-title-${m.id}`}>
+                                  {m.title}
+                                </div>
+                                <div className="truncate text-xs text-muted-foreground" data-testid={`text-meta-${m.id}`}>
+                                  {m.creator}
+                                  {m.year ? ` · ${m.year}` : ""}
+                                </div>
                               </div>
-                              <div className="truncate text-xs text-muted-foreground" data-testid={`text-meta-${m.id}`}>
-                                {m.creator}
-                                {m.year ? ` · ${m.year}` : ""}
-                              </div>
-                            </div>
-                            <Badge variant="secondary" className="rounded-full" data-testid={`badge-type-${m.id}`}>
-                              {m.type}
-                            </Badge>
-                          </div>
-                          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                            {m.tags.slice(0, 3).map((t) => (
-                              <Badge
-                                key={t}
-                                variant="secondary"
-                                className="rounded-full"
-                                data-testid={`badge-tag-${m.id}-${t}`}
-                              >
-                                {t}
+                              <Badge variant="secondary" className="rounded-full" data-testid={`badge-type-${m.id}`}>
+                                {m.type}
                               </Badge>
-                            ))}
+                            </div>
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                              {(m.tags ?? []).slice(0, 3).map((t) => (
+                                <Badge
+                                  key={t}
+                                  variant="secondary"
+                                  className="rounded-full"
+                                  data-testid={`badge-tag-${m.id}-${t}`}
+                                >
+                                  {t}
+                                </Badge>
+                              ))}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </Card>
-                </Link>
-              ))}
-            </div>
+                      </Card>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         </motion.div>
       </main>

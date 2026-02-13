@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "wouter";
 import { motion } from "framer-motion";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import {
   ArrowLeft,
   Bookmark,
@@ -23,137 +25,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 type MediaType = "movie" | "anime" | "book" | "tv";
-
-type Media = {
-  id: string;
-  type: MediaType;
-  title: string;
-  year?: string;
-  creator?: string;
-  coverGradient: string;
-  synopsis: string;
-  tags: string[];
-  ratingAvg: number;
-};
-
-type Review = {
-  id: string;
-  author: { handle: string; name: string };
-  rating: number;
-  text: string;
-  likes: number;
-};
-
-const seed: Media[] = [
-  {
-    id: "m1",
-    type: "movie",
-    title: "Blade Runner 2049",
-    year: "2017",
-    creator: "Denis Villeneuve",
-    coverGradient: "from-violet-500/30 via-fuchsia-500/20 to-emerald-400/20",
-    synopsis:
-      "A blade runner unearths a long-buried secret that could plunge what's left of society into chaos — and forces him to question what makes a life real.",
-    tags: ["neo-noir", "sci-fi", "mood"],
-    ratingAvg: 4.3,
-  },
-  {
-    id: "m2",
-    type: "anime",
-    title: "Cowboy Bebop",
-    year: "1998",
-    creator: "Shinichirō Watanabe",
-    coverGradient: "from-orange-500/25 via-rose-500/15 to-sky-500/15",
-    synopsis:
-      "A ragtag crew of bounty hunters drifts through the solar system. Stylish, episodic, and quietly devastating.",
-    tags: ["space", "jazz", "classic"],
-    ratingAvg: 4.6,
-  },
-  {
-    id: "m3",
-    type: "book",
-    title: "The Left Hand of Darkness",
-    year: "1969",
-    creator: "Ursula K. Le Guin",
-    coverGradient: "from-sky-500/20 via-indigo-500/15 to-emerald-500/15",
-    synopsis:
-      "An envoy arrives on a winter planet where gender is fluid — and discovers how politics, loyalty, and love reshape identity.",
-    tags: ["speculative", "politics", "ice"],
-    ratingAvg: 4.4,
-  },
-  {
-    id: "m4",
-    type: "tv",
-    title: "The Bear",
-    year: "2022",
-    creator: "Christopher Storer",
-    coverGradient: "from-emerald-500/20 via-teal-500/15 to-amber-500/15",
-    synopsis:
-      "A fine-dining chef returns home to run his family's sandwich shop — and finds grief, pressure, and tenderness in the heat.",
-    tags: ["chaos", "kitchen", "hearts"],
-    ratingAvg: 4.1,
-  },
-  {
-    id: "m5",
-    type: "movie",
-    title: "Spirited Away",
-    year: "2001",
-    creator: "Hayao Miyazaki",
-    coverGradient: "from-emerald-500/25 via-cyan-500/15 to-violet-500/15",
-    synopsis:
-      "A girl wanders into a spirit world and must work at a bathhouse to save her parents — a story that feels like a dream you remember forever.",
-    tags: ["wonder", "myth", "coming-of-age"],
-    ratingAvg: 4.7,
-  },
-];
-
-const reviewSeed: Record<string, Review[]> = {
-  m1: [
-    {
-      id: "rv1",
-      author: { handle: "kaito", name: "Kaito" },
-      rating: 4.5,
-      text: "Neon loneliness done right. A sequel that understands time as texture.",
-      likes: 58,
-    },
-  ],
-  m2: [
-    {
-      id: "rv2",
-      author: { handle: "luna", name: "Luna Park" },
-      rating: 5,
-      text: "Every episode is a different flavor, and the finale is the quiet kind of unforgettable.",
-      likes: 92,
-    },
-  ],
-  m3: [
-    {
-      id: "rv3",
-      author: { handle: "mori", name: "Mori" },
-      rating: 4,
-      text: "A book that makes you re-parse every assumption. Cold world, warm people.",
-      likes: 41,
-    },
-  ],
-  m4: [
-    {
-      id: "rv4",
-      author: { handle: "jules", name: "Jules" },
-      rating: 4,
-      text: "Stressful in the best way. The tenderness sneaks in through the noise.",
-      likes: 33,
-    },
-  ],
-  m5: [
-    {
-      id: "rv5",
-      author: { handle: "luna", name: "Luna Park" },
-      rating: 5,
-      text: "Still the gold standard: wonder that never talks down to you.",
-      likes: 120,
-    },
-  ],
-};
 
 function iconFor(type: MediaType) {
   switch (type) {
@@ -197,18 +68,120 @@ function Stars({ value }: { value: number }) {
   );
 }
 
+function StarRatingSelector({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <div className="flex items-center gap-1" data-testid="star-rating-selector">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          onClick={() => onChange(n)}
+          data-testid={`button-star-${n}`}
+          className="p-0.5"
+        >
+          <Star
+            className={cn(
+              "h-5 w-5 transition-colors",
+              n <= value
+                ? "fill-primary text-primary"
+                : "text-muted-foreground/35 hover:text-primary/50",
+            )}
+            strokeWidth={2}
+          />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function MediaDetail() {
   const params = useParams<{ id: string }>();
-  const id = params.id ?? "m1";
+  const id = params.id ?? "";
+  const queryClient = useQueryClient();
 
-  const media = useMemo(() => seed.find((m) => m.id === id) ?? seed[0], [id]);
-  const Icon = iconFor(media.type);
-
-  const [liked, setLiked] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [draft, setDraft] = useState("");
+  const [draftRating, setDraftRating] = useState(0);
 
-  const reviews = reviewSeed[media.id] ?? [];
+  const { data: currentUser } = useQuery<any>({
+    queryKey: ["/api/users/username/alice"],
+  });
+
+  const { data: media, isLoading: mediaLoading } = useQuery<any>({
+    queryKey: ["/api/media", id],
+    enabled: !!id,
+  });
+
+  const { data: reviews = [], isLoading: reviewsLoading } = useQuery<any[]>({
+    queryKey: [`/api/media/${id}/reviews`],
+    enabled: !!id,
+  });
+
+  const { data: watchlistStatus } = useQuery<{ onWatchlist: boolean }>({
+    queryKey: [`/api/users/${currentUser?.id}/watchlist/check/${id}`],
+    enabled: !!currentUser?.id && !!id,
+  });
+
+  const saved = watchlistStatus?.onWatchlist ?? false;
+
+  const toggleWatchlist = useMutation({
+    mutationFn: async () => {
+      if (saved) {
+        await apiRequest("DELETE", `/api/users/${currentUser.id}/watchlist/${id}`);
+      } else {
+        await apiRequest("POST", `/api/users/${currentUser.id}/watchlist/${id}`);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/users/${currentUser.id}/watchlist/check/${id}`] });
+    },
+  });
+
+  const postReview = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/reviews", {
+        userId: currentUser.id,
+        mediaId: id,
+        rating: draftRating,
+        body: draft,
+      });
+    },
+    onSuccess: () => {
+      setDraft("");
+      setDraftRating(0);
+      queryClient.invalidateQueries({ queryKey: [`/api/media/${id}/reviews`] });
+    },
+  });
+
+  const likeReview = useMutation({
+    mutationFn: async (reviewId: string) => {
+      await apiRequest("POST", `/api/reviews/${reviewId}/like`, { userId: currentUser.id });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/media/${id}/reviews`] });
+    },
+  });
+
+  const unlikeReview = useMutation({
+    mutationFn: async (reviewId: string) => {
+      await apiRequest("DELETE", `/api/reviews/${reviewId}/like`, { userId: currentUser.id });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/media/${id}/reviews`] });
+    },
+  });
+
+  if (mediaLoading || !media) {
+    return (
+      <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30 flex items-center justify-center">
+        <div className="text-muted-foreground" data-testid="loading-media">Loading…</div>
+      </div>
+    );
+  }
+
+  const Icon = iconFor(media.type as MediaType);
+  const ratingNum = media.rating ? parseFloat(media.rating) : null;
+  const topReviews = [...reviews].sort((a: any, b: any) => (b.likeCount ?? 0) - (a.likeCount ?? 0));
+  const newReviews = [...reviews];
 
   return (
     <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30">
@@ -241,19 +214,11 @@ export default function MediaDetail() {
               variant={saved ? "default" : "secondary"}
               className="rounded-xl"
               data-testid="button-save"
-              onClick={() => setSaved((v) => !v)}
+              onClick={() => toggleWatchlist.mutate()}
+              disabled={!currentUser}
             >
               <Bookmark className="mr-2 h-4 w-4" />
               {saved ? "Saved" : "Watchlist"}
-            </Button>
-            <Button
-              variant={liked ? "default" : "secondary"}
-              className="rounded-xl"
-              data-testid="button-like"
-              onClick={() => setLiked((v) => !v)}
-            >
-              <Heart className="mr-2 h-4 w-4" />
-              {liked ? "Liked" : "Like"}
             </Button>
             <Button variant="secondary" className="rounded-xl" data-testid="button-share">
               <Share2 className="mr-2 h-4 w-4" />
@@ -306,18 +271,20 @@ export default function MediaDetail() {
                     <div className="rounded-2xl border bg-card/60 px-3 py-2" data-testid="box-rating">
                       <div className="text-xs text-muted-foreground">Avg rating</div>
                       <div className="mt-1 flex items-center gap-2">
-                        <div className="font-serif text-lg font-semibold">{media.ratingAvg.toFixed(1)}</div>
-                        <Stars value={media.ratingAvg} />
+                        <div className="font-serif text-lg font-semibold">
+                          {ratingNum != null ? ratingNum.toFixed(1) : "N/A"}
+                        </div>
+                        {ratingNum != null && <Stars value={ratingNum} />}
                       </div>
                     </div>
                   </div>
 
                   <p className="mt-3 text-sm leading-relaxed text-muted-foreground" data-testid="text-synopsis">
-                    {media.synopsis}
+                    No synopsis available yet.
                   </p>
 
                   <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                    {media.tags.map((t) => (
+                    {(media.tags ?? []).map((t: string) => (
                       <Badge key={t} variant="secondary" className="rounded-full" data-testid={`badge-tag-${t}`}>
                         {t}
                       </Badge>
@@ -348,6 +315,11 @@ export default function MediaDetail() {
 
               <Separator className="my-4" />
 
+              <div className="mb-3 flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Your rating:</span>
+                <StarRatingSelector value={draftRating} onChange={setDraftRating} />
+              </div>
+
               <Textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
@@ -360,7 +332,11 @@ export default function MediaDetail() {
                 <div className="text-xs text-muted-foreground" data-testid="text-draft-hint">
                   Tip: mention a scene / line / moment.
                 </div>
-                <Button className="rounded-xl" data-testid="button-post-quick" onClick={() => setDraft("")}
+                <Button
+                  className="rounded-xl"
+                  data-testid="button-post-quick"
+                  disabled={!draft.trim() || draftRating === 0 || !currentUser || postReview.isPending}
+                  onClick={() => postReview.mutate()}
                 >
                   Post
                 </Button>
@@ -394,60 +370,29 @@ export default function MediaDetail() {
                 </TabsList>
 
                 <TabsContent value="top" className="mt-4 space-y-3">
-                  {reviews.map((r) => (
-                    <Card key={r.id} className="rounded-3xl border bg-card/60 p-4" data-testid={`card-review-${r.id}`}>
-                      <div className="flex items-start gap-3">
-                        <Link href={`/u/${r.author.handle}`} data-testid={`link-review-author-${r.id}`}>
-                          <Avatar className="h-10 w-10 ring-1 ring-border" data-testid={`avatar-review-${r.id}`}>
-                            <AvatarImage alt={r.author.name} src="" />
-                            <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
-                              {r.author.name.slice(0, 1)}
-                            </AvatarFallback>
-                          </Avatar>
-                        </Link>
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <div className="truncate text-sm font-semibold" data-testid={`text-author-${r.id}`}>
-                                  {r.author.name}
-                                </div>
-                                <Badge variant="secondary" className="rounded-full" data-testid={`badge-rating-${r.id}`}>
-                                  {r.rating}★
-                                </Badge>
-                              </div>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              className="rounded-xl"
-                              data-testid={`button-like-review-${r.id}`}
-                            >
-                              <Heart className="mr-2 h-4 w-4" />
-                              Like
-                              <span className="ml-2 rounded-full bg-black/5 px-2 py-0.5 text-xs dark:bg-white/10">
-                                {r.likes}
-                              </span>
-                            </Button>
-                          </div>
-
-                          <p className="mt-2 text-sm leading-relaxed text-foreground/90" data-testid={`text-review-${r.id}`}>
-                            {r.text}
-                          </p>
-                        </div>
-                      </div>
-                    </Card>
+                  {reviewsLoading ? (
+                    <div className="text-center text-sm text-muted-foreground p-4" data-testid="loading-reviews">Loading reviews…</div>
+                  ) : topReviews.length === 0 ? (
+                    <div className="rounded-3xl border bg-card/60 p-10 text-center" data-testid="empty-top">
+                      <div className="font-serif text-xl font-semibold">No reviews yet.</div>
+                      <p className="mt-2 text-sm text-muted-foreground">Be the first to share your thoughts.</p>
+                    </div>
+                  ) : topReviews.map((r: any) => (
+                    <ReviewCard key={r.id} r={r} currentUser={currentUser} onLike={likeReview} onUnlike={unlikeReview} />
                   ))}
                 </TabsContent>
 
-                <TabsContent value="new" className="mt-4">
-                  <div className="rounded-3xl border bg-card/60 p-10 text-center" data-testid="empty-new">
-                    <div className="font-serif text-xl font-semibold">New reviews will show up here.</div>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      In a real app, this is sorted by time.
-                    </p>
-                  </div>
+                <TabsContent value="new" className="mt-4 space-y-3">
+                  {reviewsLoading ? (
+                    <div className="text-center text-sm text-muted-foreground p-4" data-testid="loading-reviews-new">Loading reviews…</div>
+                  ) : newReviews.length === 0 ? (
+                    <div className="rounded-3xl border bg-card/60 p-10 text-center" data-testid="empty-new">
+                      <div className="font-serif text-xl font-semibold">No reviews yet.</div>
+                      <p className="mt-2 text-sm text-muted-foreground">Be the first to share your thoughts.</p>
+                    </div>
+                  ) : newReviews.map((r: any) => (
+                    <ReviewCard key={r.id} r={r} currentUser={currentUser} onLike={likeReview} onUnlike={unlikeReview} />
+                  ))}
                 </TabsContent>
               </Tabs>
             </Card>
@@ -488,5 +433,67 @@ export default function MediaDetail() {
         </div>
       </div>
     </div>
+  );
+}
+
+function ReviewCard({ r, currentUser, onLike, onUnlike }: { r: any; currentUser: any; onLike: any; onUnlike: any }) {
+  const [liked, setLiked] = useState(false);
+
+  const handleLikeToggle = () => {
+    if (liked) {
+      onUnlike.mutate(r.id);
+      setLiked(false);
+    } else {
+      onLike.mutate(r.id);
+      setLiked(true);
+    }
+  };
+
+  return (
+    <Card key={r.id} className="rounded-3xl border bg-card/60 p-4" data-testid={`card-review-${r.id}`}>
+      <div className="flex items-start gap-3">
+        <Link href={`/u/${r.user.username}`} data-testid={`link-review-author-${r.id}`}>
+          <Avatar className="h-10 w-10 ring-1 ring-border" data-testid={`avatar-review-${r.id}`}>
+            <AvatarImage alt={r.user.displayName} src={r.user.avatarUrl || ""} />
+            <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
+              {r.user.displayName.slice(0, 1)}
+            </AvatarFallback>
+          </Avatar>
+        </Link>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <div className="truncate text-sm font-semibold" data-testid={`text-author-${r.id}`}>
+                  {r.user.displayName}
+                </div>
+                <Badge variant="secondary" className="rounded-full" data-testid={`badge-rating-${r.id}`}>
+                  {r.rating}★
+                </Badge>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant={liked ? "default" : "secondary"}
+              className="rounded-xl"
+              data-testid={`button-like-review-${r.id}`}
+              onClick={handleLikeToggle}
+              disabled={!currentUser}
+            >
+              <Heart className="mr-2 h-4 w-4" />
+              {liked ? "Liked" : "Like"}
+              <span className="ml-2 rounded-full bg-black/5 px-2 py-0.5 text-xs dark:bg-white/10">
+                {r.likeCount ?? 0}
+              </span>
+            </Button>
+          </div>
+
+          <p className="mt-2 text-sm leading-relaxed text-foreground/90" data-testid={`text-review-${r.id}`}>
+            {r.body}
+          </p>
+        </div>
+      </div>
+    </Card>
   );
 }
