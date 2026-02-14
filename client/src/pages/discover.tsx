@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
@@ -23,7 +23,6 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import type { Media } from "@shared/schema";
 
 type MediaType = "movie" | "anime" | "book" | "tv" | "music";
 
@@ -44,14 +43,24 @@ function mediaIcon(type: string) {
   }
 }
 
-function CoverMini({ m }: { m: Media }) {
+function useDebounce(value: string, delay: number) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
+function CoverMini({ m }: { m: any }) {
   const Icon = mediaIcon(m.type);
+  const itemId = m.id || m.externalId || "unknown";
   return (
     <div
       className="relative h-20 w-16 overflow-hidden rounded-2xl border bg-card shadow-sm"
-      data-testid={`img-cover-${m.id}`}
+      data-testid={`img-cover-${itemId}`}
     >
-      <div className={cn("absolute inset-0 bg-gradient-to-br", m.coverGradient)} />
+      <div className={cn("absolute inset-0 bg-gradient-to-br", m.coverGradient || "from-slate-700 to-slate-900")} />
       {m.coverUrl && (
         <img src={m.coverUrl} alt={m.title} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
       )}
@@ -66,19 +75,30 @@ function CoverMini({ m }: { m: Media }) {
 export default function Discover() {
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<MediaType | "all">("all");
+  const debouncedQuery = useDebounce(query, 300);
 
-  const { data: mediaItems = [], isLoading } = useQuery<Media[]>({
-    queryKey: ["/api/media", activeTab, query],
-    queryFn: () => {
-      let url = "/api/media";
-      const params = new URLSearchParams();
-      if (activeTab !== "all") params.set("type", activeTab);
-      if (query.trim()) params.set("search", query.trim());
-      const qs = params.toString();
-      if (qs) url += "?" + qs;
-      return fetch(url).then((r) => r.json());
-    },
+  const isSearching = debouncedQuery.trim().length > 0;
+
+  const trendingType = activeTab === "all" ? "all" : activeTab;
+  const { data: trendingItems = [], isLoading: trendingLoading } = useQuery<any[]>({
+    queryKey: ["/api/trending", trendingType],
+    queryFn: () =>
+      fetch(`/api/trending/${trendingType}?limit=20`).then((r) => r.json()),
+    enabled: !isSearching,
   });
+
+  const { data: searchItems = [], isLoading: searchLoading } = useQuery<any[]>({
+    queryKey: ["/api/search/all", debouncedQuery, activeTab],
+    queryFn: () => {
+      const params = new URLSearchParams({ q: debouncedQuery.trim() });
+      if (activeTab !== "all") params.set("type", activeTab);
+      return fetch(`/api/search/all?${params}`).then((r) => r.json());
+    },
+    enabled: isSearching,
+  });
+
+  const mediaItems = isSearching ? searchItems : trendingItems;
+  const isLoading = isSearching ? searchLoading : trendingLoading;
 
   return (
     <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30">
@@ -199,33 +219,35 @@ export default function Discover() {
               </div>
             ) : (
               <div className="mt-3 grid gap-3">
-                {mediaItems.map((m) => (
-                  <Link key={m.id} href={`/m/${m.id}`} data-testid={`link-result-${m.id}`} className="block">
+                {mediaItems.map((m: any, idx: number) => {
+                  const itemId = m.id || m.externalId || `item-${idx}`;
+                  return (
+                    <div key={itemId} data-testid={`link-result-${itemId}`} className="block">
                       <Card className="glass bg-noise rounded-3xl p-4 sm:p-5 hover:opacity-[0.98] transition">
                         <div className="flex items-center gap-4">
                           <CoverMini m={m} />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <div className="truncate text-sm font-semibold" data-testid={`text-title-${m.id}`}>
+                                <div className="truncate text-sm font-semibold" data-testid={`text-title-${itemId}`}>
                                   {m.title}
                                 </div>
-                                <div className="truncate text-xs text-muted-foreground" data-testid={`text-meta-${m.id}`}>
+                                <div className="truncate text-xs text-muted-foreground" data-testid={`text-meta-${itemId}`}>
                                   {m.creator}
                                   {m.year ? ` · ${m.year}` : ""}
                                 </div>
                               </div>
-                              <Badge variant="secondary" className="rounded-full" data-testid={`badge-type-${m.id}`}>
+                              <Badge variant="secondary" className="rounded-full" data-testid={`badge-type-${itemId}`}>
                                 {m.type}
                               </Badge>
                             </div>
                             <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                              {(m.tags ?? []).slice(0, 3).map((t) => (
+                              {(m.tags ?? []).slice(0, 3).map((t: string) => (
                                 <Badge
                                   key={t}
                                   variant="secondary"
                                   className="rounded-full"
-                                  data-testid={`badge-tag-${m.id}-${t}`}
+                                  data-testid={`badge-tag-${itemId}-${t}`}
                                 >
                                   {t}
                                 </Badge>
@@ -234,8 +256,9 @@ export default function Discover() {
                           </div>
                         </div>
                       </Card>
-                  </Link>
-                ))}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

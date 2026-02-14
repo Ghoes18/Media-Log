@@ -1,11 +1,12 @@
-import { useMemo, useState } from "react";
-import { Link } from "wouter";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
 import {
   BookOpen,
   Clapperboard,
   Film,
   Heart,
+  Loader2,
   Music,
   Plus,
   Search,
@@ -96,15 +97,16 @@ function Stars({ value }: { value: number }) {
 function Cover({ m }: { m: any }) {
   const Icon = mediaIcon(m.type as MediaType);
   const displayRating = m.rating ? parseFloat(m.rating) : null;
+  const itemId = m.id || m.externalId || "unknown";
   return (
     <div
       className={cn(
         "relative aspect-[3/4] w-full overflow-hidden rounded-xl border bg-card shadow-sm",
         "bg-noise",
       )}
-      data-testid={`cover-${m.id}`}
+      data-testid={`cover-${itemId}`}
     >
-      <div className={cn("absolute inset-0 bg-gradient-to-br", m.coverGradient)} />
+      <div className={cn("absolute inset-0 bg-gradient-to-br", m.coverGradient || "from-slate-700 to-slate-900")} />
       {m.coverUrl && (
         <img
           src={m.coverUrl}
@@ -247,22 +249,46 @@ function relativeTime(dateStr: string) {
   return "Just now";
 }
 
+function useDebounce(value: string, delay: number) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
 export default function Home() {
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<MediaType | "all">("all");
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
+  const debouncedQuery = useDebounce(query, 300);
 
   const { data: currentUser } = useQuery<any>({
     queryKey: ["/api/users/username/alice"],
   });
 
-  const { data: mediaData = [], isLoading: mediaLoading } = useQuery<any[]>({
-    queryKey: ["/api/media", activeTab],
+  const trendingType = activeTab === "all" ? "all" : activeTab;
+  const { data: trendingData = [], isLoading: trendingLoading } = useQuery<any[]>({
+    queryKey: ["/api/trending", trendingType],
     queryFn: () =>
-      fetch(activeTab === "all" ? "/api/media" : `/api/media?type=${activeTab}`).then((r) =>
-        r.json(),
-      ),
+      fetch(`/api/trending/${trendingType}?limit=12`).then((r) => r.json()),
   });
+
+  const isSearching = debouncedQuery.trim().length > 0;
+  const { data: searchResults = [], isLoading: searchLoading } = useQuery<any[]>({
+    queryKey: ["/api/search/all", debouncedQuery, activeTab],
+    queryFn: () => {
+      const params = new URLSearchParams({ q: debouncedQuery.trim() });
+      if (activeTab !== "all") params.set("type", activeTab);
+      return fetch(`/api/search/all?${params}`).then((r) => r.json());
+    },
+    enabled: isSearching,
+  });
+
+  const media = isSearching ? searchResults : trendingData;
+  const mediaLoading = isSearching ? searchLoading : trendingLoading;
 
   const { data: popularReviews = [], isLoading: reviewsLoading } = useQuery<any[]>({
     queryKey: ["/api/reviews/popular"],
@@ -300,16 +326,6 @@ export default function Home() {
       queryClient.invalidateQueries({ queryKey: ["/api/reviews/popular"] });
     },
   });
-
-  const media = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return mediaData;
-    return mediaData.filter((m: any) =>
-      [m.title, m.creator, m.year].some((v) =>
-        (v ?? "").toLowerCase().includes(q),
-      ),
-    );
-  }, [query, mediaData]);
 
   const toggleLike = (reviewId: string) => {
     const currentlyLiked = likedMap[reviewId] ?? false;
@@ -456,34 +472,32 @@ export default function Home() {
                     />
                   ))
                 ) : (
-                  media.slice(0, 6).map((m: any) => (
-                    <Link
-                      key={m.id}
-                      href={`/m/${m.id}`}
-                      data-testid={`link-media-${m.id}`}
-                      className="group"
-                    >
-                      <motion.div
-                        whileHover={{ y: -4 }}
-                        transition={{ duration: 0.2 }}
-                        className="rounded-2xl"
-                      >
-                        <Cover m={m} />
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          {(m.tags ?? []).slice(0, 3).map((t: string) => (
-                            <Badge
-                              key={t}
-                              variant="secondary"
-                              className="rounded-full"
-                              data-testid={`badge-tag-${m.id}-${t}`}
-                            >
-                              {t}
-                            </Badge>
-                          ))}
-                        </div>
-                      </motion.div>
-                    </Link>
-                  ))
+                  media.slice(0, 6).map((m: any, idx: number) => {
+                    const itemId = m.id || m.externalId || `item-${idx}`;
+                    return (
+                      <div key={`${m.type}-${itemId}`} data-testid={`link-media-${itemId}`} className="group">
+                        <motion.div
+                          whileHover={{ y: -4 }}
+                          transition={{ duration: 0.2 }}
+                          className="rounded-2xl"
+                        >
+                          <Cover m={m} />
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                            {(m.tags ?? []).slice(0, 3).map((t: string) => (
+                              <Badge
+                                key={t}
+                                variant="secondary"
+                                className="rounded-full"
+                                data-testid={`badge-tag-${itemId}-${t}`}
+                              >
+                                {t}
+                              </Badge>
+                            ))}
+                          </div>
+                        </motion.div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>

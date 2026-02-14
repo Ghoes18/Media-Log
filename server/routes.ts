@@ -3,12 +3,101 @@ import { type Server } from "http";
 import { storage } from "./storage";
 import { insertReviewSchema } from "@shared/schema";
 import { searchSpotifyAlbums, getSpotifyAlbum } from "./spotify";
-import { searchOpenLibraryBooks, getOpenLibraryBook } from "./openlibrary";
+import { searchOpenLibraryBooks, getOpenLibraryBook, getTrendingBooks } from "./openlibrary";
+import {
+  getTrendingMovies, getTrendingTv, getTrendingAnime,
+  searchTmdbMovies, searchTmdbTv, searchTmdbAnime,
+} from "./tmdb";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express,
 ): Promise<Server> {
+  app.get("/api/trending/:type", async (req, res) => {
+    const type = req.params.type;
+    const limit = parseInt(req.query.limit as string) || 10;
+    try {
+      let results: any[] = [];
+      switch (type) {
+        case "movie":
+          results = await getTrendingMovies(limit);
+          break;
+        case "tv":
+          results = await getTrendingTv(limit);
+          break;
+        case "anime":
+          results = await getTrendingAnime(limit);
+          break;
+        case "book":
+          results = await getTrendingBooks(limit);
+          break;
+        case "music":
+          results = await searchSpotifyAlbums("top hits 2024", limit);
+          break;
+        case "all": {
+          const [movies, tv, anime, books, music] = await Promise.all([
+            getTrendingMovies(4),
+            getTrendingTv(4),
+            getTrendingAnime(4),
+            getTrendingBooks(4),
+            searchSpotifyAlbums("top hits 2024", 4).catch(() => []),
+          ]);
+          results = [...movies, ...tv, ...anime, ...books, ...music];
+          break;
+        }
+        default:
+          return res.status(400).json({ message: "Invalid type. Use movie, tv, anime, book, music, or all" });
+      }
+      res.json(results);
+    } catch (err: any) {
+      console.error(`Trending ${type} error:`, err.message);
+      res.status(500).json({ message: "Failed to fetch trending content" });
+    }
+  });
+
+  app.get("/api/search/all", async (req, res) => {
+    const q = req.query.q as string;
+    const type = req.query.type as string || "all";
+    const limit = parseInt(req.query.limit as string) || 8;
+    if (!q) return res.status(400).json({ message: "Query parameter 'q' is required" });
+
+    try {
+      if (type !== "all") {
+        let results: any[] = [];
+        switch (type) {
+          case "movie":
+            results = await searchTmdbMovies(q, limit);
+            break;
+          case "tv":
+            results = await searchTmdbTv(q, limit);
+            break;
+          case "anime":
+            results = await searchTmdbAnime(q, limit);
+            break;
+          case "book":
+            results = await searchOpenLibraryBooks(q, limit);
+            break;
+          case "music":
+            results = await searchSpotifyAlbums(q, limit);
+            break;
+        }
+        return res.json(results);
+      }
+
+      const [movies, tv, anime, books, music] = await Promise.all([
+        searchTmdbMovies(q, 4).catch(() => []),
+        searchTmdbTv(q, 4).catch(() => []),
+        searchTmdbAnime(q, 4).catch(() => []),
+        searchOpenLibraryBooks(q, 4).catch(() => []),
+        searchSpotifyAlbums(q, 4).catch(() => []),
+      ]);
+      res.json([...movies, ...tv, ...anime, ...books, ...music]);
+    } catch (err: any) {
+      console.error("Unified search error:", err.message);
+      res.status(500).json({ message: "Search failed" });
+    }
+  });
+
   app.get("/api/users/top-reviewers", async (req, res) => {
     const limit = parseInt(req.query.limit as string) || 5;
     const result = await storage.getTopReviewers(limit);

@@ -19,13 +19,16 @@ Full-stack application with PostgreSQL database, Express API, and React frontend
 - `shared/schema.ts` - Database schema (users, media, reviews, watchlist, favorites, follows, reviewLikes)
 - `server/storage.ts` - DatabaseStorage class with all CRUD operations
 - `server/routes.ts` - Express API routes (all prefixed with /api)
+- `server/tmdb.ts` - TMDB API helper (trending + search for movies, TV, anime with 30min cache)
 - `server/seed.ts` - Seeds 4 users, 22 media items (5 movies, 5 anime, 4 books, 4 TV, 4 music), 16 reviews
 - `server/spotify.ts` - Spotify connector with MusicBrainz/Cover Art Archive fallback
-- `server/openlibrary.ts` - Open Library search and book detail fetching
+- `server/openlibrary.ts` - Open Library search, trending, and book detail fetching
 - `server/db.ts` - Drizzle database connection
 - `client/src/pages/` - 6 pages: home, discover, profile, media-detail, watchlist, review-create
 
 ## API Routes
+- GET /api/trending/:type (movie|tv|anime|book|music|all) - fetches trending content from external APIs with caching
+- GET /api/search/all?q=&type= - unified real-time search across TMDB, Open Library, Spotify/MusicBrainz
 - GET /api/users/top-reviewers, GET /api/users/:id, GET /api/users/username/:username
 - GET /api/media, GET /api/media/:id, GET /api/media/:id/reviews
 - GET /api/reviews/popular, GET /api/reviews/recent, GET /api/users/:id/reviews
@@ -40,9 +43,16 @@ Full-stack application with PostgreSQL database, Express API, and React frontend
 - GET /api/search/books/work/:workId
 
 ## Home Page Sections
-- Hero with search, category browse cards, media grid with tabs
-- "Popular Reviews This Week" (sorted by likes, replaces old "Recent Activity")
+- Hero with real-time search (debounced 300ms), category browse cards, trending media grid with tabs
+- Media grid shows trending/popular content from external APIs (TMDB, Open Library, Spotify/MusicBrainz)
+- "Popular Reviews This Week" (sorted by likes)
 - Sidebar: profile preview, favorites, Top Reviewers (ranked by review count), watchlist
+
+## External API Integration
+- **TMDB**: Trending movies/TV via `/trending/{type}/week`, anime via `/discover/tv?with_genres=16`, search via `/search/{type}`
+- **Open Library**: Trending books via `/trending/weekly.json`, search via `/search.json`
+- **Spotify/MusicBrainz**: Music search with MusicBrainz + Cover Art Archive fallback
+- **Caching**: 30-minute in-memory TTL cache for trending + search results to avoid API rate limits
 
 ## User Preferences
 - Dark mode by default

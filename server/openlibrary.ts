@@ -1,3 +1,30 @@
+export async function getTrendingBooks(limit = 10) {
+  try {
+    const url = `https://openlibrary.org/trending/weekly.json?limit=${limit}`;
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.works || []).slice(0, limit).map((doc: any) => ({
+      externalId: doc.key || "",
+      title: doc.title || "",
+      creator: doc.author_name?.join(", ") || (doc.authors || []).map((a: any) => a.name || "").join(", ") || "Unknown",
+      year: doc.first_publish_year?.toString() || "",
+      coverUrl: doc.cover_i
+        ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`
+        : doc.cover_edition_key
+          ? `https://covers.openlibrary.org/b/olid/${doc.cover_edition_key}-L.jpg`
+          : "",
+      synopsis: "",
+      tags: (doc.subject || []).slice(0, 3),
+      type: "book" as const,
+      rating: "",
+    }));
+  } catch (e) {
+    console.error("getTrendingBooks error:", e);
+    return [];
+  }
+}
+
 export async function searchOpenLibraryBooks(query: string, limit = 10) {
   const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=${limit}&fields=key,title,author_name,first_publish_year,cover_i,subject,first_sentence`;
   const res = await fetch(url);
