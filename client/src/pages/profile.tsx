@@ -8,6 +8,7 @@ import {
   Clapperboard,
   Film,
   Heart,
+  Music,
   Plus,
   Settings2,
   Star,
@@ -32,6 +33,8 @@ function iconFor(type: string) {
       return BookOpen;
     case "tv":
       return Tv2;
+    case "music":
+      return Music;
     default:
       return Film;
   }

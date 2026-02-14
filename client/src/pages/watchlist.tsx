@@ -9,6 +9,7 @@ import {
   Check,
   Clapperboard,
   Film,
+  Music,
   Star,
   Trash2,
   Tv2,
@@ -21,7 +22,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-type MediaType = "movie" | "anime" | "book" | "tv";
+type MediaType = "movie" | "anime" | "book" | "tv" | "music";
 
 function iconFor(type: MediaType) {
   switch (type) {
@@ -33,6 +34,8 @@ function iconFor(type: MediaType) {
       return BookOpen;
     case "tv":
       return Tv2;
+    case "music":
+      return Music;
   }
 }
 
