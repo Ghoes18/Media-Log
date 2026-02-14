@@ -63,9 +63,19 @@ async function getCoverArt(mbid: string): Promise<string> {
       redirect: "follow",
     });
     if (!res.ok) return "";
-    const data = await res.json();
+    let data: any;
+    const text = await res.text();
+    if (text.startsWith("See: ")) {
+      const redirectUrl = text.replace("See: ", "").trim();
+      const res2 = await fetch(redirectUrl);
+      if (!res2.ok) return "";
+      data = await res2.json();
+    } else {
+      data = JSON.parse(text);
+    }
     const front = data.images?.find((img: any) => img.front);
-    return front?.thumbnails?.large || front?.image || data.images?.[0]?.image || "";
+    const url = front?.thumbnails?.["500"] || front?.thumbnails?.large || front?.image || data.images?.[0]?.image || "";
+    return url.replace(/^http:\/\//, "https://");
   } catch {
     return "";
   }

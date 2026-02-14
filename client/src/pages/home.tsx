@@ -259,6 +259,16 @@ export default function Home() {
     queryKey: ["/api/reviews/recent"],
   });
 
+  const { data: favoritesData = [] } = useQuery<any[]>({
+    queryKey: [`/api/users/${currentUser?.id}/favorites`],
+    enabled: !!currentUser?.id,
+  });
+
+  const { data: watchlistData = [] } = useQuery<any[]>({
+    queryKey: [`/api/users/${currentUser?.id}/watchlist`],
+    enabled: !!currentUser?.id,
+  });
+
   const [likedMap, setLikedMap] = useState<Record<string, boolean>>({});
 
   const likeMutation = useMutation({
@@ -629,10 +639,14 @@ export default function Home() {
                 </div>
 
                 <div className="mt-3 grid grid-cols-4 gap-2">
-                  {mediaData.slice(0, 4).map((m: any) => (
+                  {favoritesData.slice(0, 4).map((m: any) => (
                     <Link key={m.id} href={`/m/${m.id}`} data-testid={`link-fave-${m.id}`}>
                       <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-                        <div className={cn("aspect-[3/4] bg-gradient-to-br", m.coverGradient)} />
+                        <div className={cn("relative aspect-[3/4] bg-gradient-to-br", m.coverGradient)}>
+                          {m.coverUrl && (
+                            <img src={m.coverUrl} alt={m.title} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
+                          )}
+                        </div>
                       </div>
                     </Link>
                   ))}
@@ -663,11 +677,14 @@ export default function Home() {
 
               <ScrollArea className="h-[280px] pr-3" data-testid="scroll-watchlist">
                 <div className="space-y-2">
-                  {mediaData.slice(1, 6).map((m: any) => (
+                  {watchlistData.slice(0, 5).map((m: any) => (
                     <Link key={m.id} href={`/m/${m.id}`} data-testid={`row-watchlist-${m.id}`}>
                       <div className="flex items-center gap-3 rounded-2xl border bg-card/60 p-3 hover:bg-card/80 transition">
-                        <div className="h-10 w-10 overflow-hidden rounded-xl border bg-card shadow-sm">
+                        <div className="relative h-10 w-10 overflow-hidden rounded-xl border bg-card shadow-sm">
                           <div className={cn("h-full w-full bg-gradient-to-br", m.coverGradient)} />
+                          {m.coverUrl && (
+                            <img src={m.coverUrl} alt={m.title} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
+                          )}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-semibold" data-testid={`text-watchlist-title-${m.id}`}>

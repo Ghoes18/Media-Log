@@ -406,10 +406,13 @@ export default function Profile() {
                         <div className="flex items-start gap-3">
                           <div
                             className={cn(
-                              "h-12 w-10 shrink-0 overflow-hidden rounded-2xl border bg-card shadow-sm",
+                              "relative h-12 w-10 shrink-0 overflow-hidden rounded-2xl border bg-card shadow-sm",
                             )}
                           >
                             <div className={cn("h-full w-full bg-gradient-to-br", r.media?.coverGradient ?? "")} />
+                            {r.media?.coverUrl && (
+                              <img src={r.media.coverUrl} alt={r.media.title} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
+                            )}
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-2">
