@@ -6,6 +6,7 @@ import {
   Clapperboard,
   Film,
   Heart,
+  Music,
   Plus,
   Search,
   Star,
@@ -33,7 +34,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-type MediaType = "movie" | "anime" | "book" | "tv";
+type MediaType = "movie" | "anime" | "book" | "tv" | "music";
 
 function mediaIcon(type: MediaType) {
   switch (type) {
@@ -45,6 +46,8 @@ function mediaIcon(type: MediaType) {
       return BookOpen;
     case "tv":
       return Tv2;
+    case "music":
+      return Music;
   }
 }
 
@@ -154,7 +157,7 @@ function TopNav({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search films, anime, books, TV…"
+            placeholder="Search films, anime, books, TV, music…"
             className="h-7 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
             data-testid="input-search"
           />
@@ -196,7 +199,7 @@ function TopNav({
                   <Input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search films, anime, books, TV…"
+                    placeholder="Search films, anime, books, TV, music…"
                     className="h-9 rounded-xl"
                     data-testid="input-search-mobile"
                   />
@@ -311,7 +314,7 @@ export default function Home() {
                     data-testid="badge-slogan"
                   >
                     <Star className="h-3.5 w-3.5 fill-primary text-primary" />
-                    taste across films, anime, books & TV
+                    taste across films, anime, books, TV & music
                   </div>
                   <h1
                     className="mt-3 font-serif text-3xl font-semibold tracking-tight sm:text-4xl"
@@ -356,7 +359,7 @@ export default function Home() {
                   onValueChange={(v) => setActiveTab(v as any)}
                   className="w-full"
                 >
-                  <TabsList className="grid w-full grid-cols-5 rounded-2xl bg-muted/50 p-1">
+                  <TabsList className="grid w-full grid-cols-6 rounded-2xl bg-muted/50 p-1">
                     <TabsTrigger value="all" className="rounded-xl" data-testid="tab-all">
                       All
                     </TabsTrigger>
@@ -371,6 +374,9 @@ export default function Home() {
                     </TabsTrigger>
                     <TabsTrigger value="tv" className="rounded-xl" data-testid="tab-tv">
                       TV
+                    </TabsTrigger>
+                    <TabsTrigger value="music" className="rounded-xl" data-testid="tab-music">
+                      Music
                     </TabsTrigger>
                   </TabsList>
                 </Tabs>

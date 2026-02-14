@@ -8,6 +8,7 @@ import {
   Clapperboard,
   Filter,
   Film,
+  Music,
   Flame,
   Loader2,
   Search,
@@ -24,7 +25,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import type { Media } from "@shared/schema";
 
-type MediaType = "movie" | "anime" | "book" | "tv";
+type MediaType = "movie" | "anime" | "book" | "tv" | "music";
 
 function mediaIcon(type: string) {
   switch (type) {
@@ -36,6 +37,8 @@ function mediaIcon(type: string) {
       return BookOpen;
     case "tv":
       return Tv2;
+    case "music":
+      return Music;
     default:
       return Film;
   }
@@ -135,7 +138,7 @@ export default function Discover() {
                   Find your next favorite.
                 </h2>
                 <p className="mt-1 text-sm text-muted-foreground" data-testid="text-search-subtitle">
-                  Search across films, anime, books, and TV shows.
+                  Search across films, anime, books, TV shows, and music.
                 </p>
               </div>
             </div>
@@ -155,7 +158,7 @@ export default function Discover() {
               </div>
 
               <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full sm:w-auto">
-                <TabsList className="grid w-full grid-cols-5 rounded-2xl bg-muted/50 p-1 sm:w-[420px]">
+                <TabsList className="grid w-full grid-cols-6 rounded-2xl bg-muted/50 p-1 sm:w-[500px]">
                   <TabsTrigger value="all" className="rounded-xl" data-testid="tab-all">
                     All
                   </TabsTrigger>
@@ -170,6 +173,9 @@ export default function Discover() {
                   </TabsTrigger>
                   <TabsTrigger value="tv" className="rounded-xl" data-testid="tab-tv">
                     TV
+                  </TabsTrigger>
+                  <TabsTrigger value="music" className="rounded-xl" data-testid="tab-music">
+                    Music
                   </TabsTrigger>
                 </TabsList>
               </Tabs>

@@ -6,6 +6,7 @@ import {
   BookOpen,
   Clapperboard,
   Film,
+  Music,
   Star,
   Tv2,
 } from "lucide-react";
@@ -23,7 +24,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
-type MediaType = "movie" | "anime" | "book" | "tv";
+type MediaType = "movie" | "anime" | "book" | "tv" | "music";
 
 function iconFor(type: MediaType) {
   switch (type) {
@@ -35,6 +36,8 @@ function iconFor(type: MediaType) {
       return BookOpen;
     case "tv":
       return Tv2;
+    case "music":
+      return Music;
   }
 }
 
@@ -206,6 +209,9 @@ export default function ReviewCreate() {
                       </SelectItem>
                       <SelectItem value="tv" data-testid="option-medium-tv">
                         TV Show
+                      </SelectItem>
+                      <SelectItem value="music" data-testid="option-medium-music">
+                        Music
                       </SelectItem>
                     </SelectContent>
                   </Select>

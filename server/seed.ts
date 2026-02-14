@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { users, media, reviews, favorites, follows, watchlist } from "@shared/schema";
 import { sql } from "drizzle-orm";
+import { searchSpotifyAlbums, searchMusicBrainz } from "./spotify";
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const TMDB_BASE = "https://api.themoviedb.org/3";
@@ -98,6 +99,11 @@ const mediaSeedData: MediaSeedItem[] = [
   { type: "tv", title: "The Bear", creator: "Christopher Storer", year: "2022", coverGradient: "from-slate-500 to-orange-700", tags: ["Drama", "Comedy"], rating: "8.7" },
   { type: "tv", title: "Severance", creator: "Dan Erickson", year: "2022", coverGradient: "from-cyan-400 to-blue-900", tags: ["Sci-Fi", "Thriller"], rating: "8.7" },
   { type: "tv", title: "Shogun", creator: "Rachel Kondo", year: "2024", coverGradient: "from-red-600 to-stone-800", tags: ["Drama", "Historical"], rating: "8.6" },
+
+  { type: "music", title: "OK Computer", creator: "Radiohead", year: "1997", coverGradient: "from-cyan-600 to-slate-900", tags: ["Alt Rock", "Art Rock"], rating: "9.4" },
+  { type: "music", title: "To Pimp a Butterfly", creator: "Kendrick Lamar", year: "2015", coverGradient: "from-stone-700 to-amber-800", tags: ["Hip Hop", "Jazz Rap"], rating: "9.2" },
+  { type: "music", title: "In Rainbows", creator: "Radiohead", year: "2007", coverGradient: "from-red-500 to-orange-700", tags: ["Alt Rock", "Electronic"], rating: "9.1" },
+  { type: "music", title: "Blonde", creator: "Frank Ocean", year: "2016", coverGradient: "from-lime-400 to-emerald-800", tags: ["R&B", "Art Pop"], rating: "9.0" },
 ];
 
 export async function seedDatabase() {
@@ -133,6 +139,17 @@ export async function seedDatabase() {
         const bookData = await fetchBookData(m.title, m.creator);
         coverUrl = bookData.coverUrl;
         synopsis = bookSynopses[m.title] || bookData.synopsis || "";
+      } else if (m.type === "music") {
+        try {
+          const results = await searchSpotifyAlbums(`${m.title} ${m.creator}`, 1);
+          if (results.length > 0) {
+            coverUrl = results[0].coverUrl;
+            synopsis = `Album by ${m.creator}, released ${m.year}.`;
+          }
+        } catch {
+          coverUrl = "";
+          synopsis = `Album by ${m.creator}, released ${m.year}.`;
+        }
       }
 
       return { ...m, coverUrl, synopsis };
@@ -164,6 +181,8 @@ export async function seedDatabase() {
     { userId: dave.id, mediaId: mediaMap["Shogun"], rating: 5, body: "A masterclass in historical drama. The attention to cultural detail is extraordinary." },
     { userId: alice.id, mediaId: mediaMap["Spirited Away"], rating: 5, body: "Miyazaki's magnum opus. Every frame is a painting and the story resonates at any age." },
     { userId: bob.id, mediaId: mediaMap["Project Hail Mary"], rating: 5, body: "Could not put this down. The science is fascinating and the friendship at its core is deeply moving." },
+    { userId: alice.id, mediaId: mediaMap["OK Computer"], rating: 5, body: "A haunting, prophetic album about technology and alienation. Every track is a masterpiece." },
+    { userId: dave.id, mediaId: mediaMap["To Pimp a Butterfly"], rating: 5, body: "A landmark album. Kendrick weaves jazz, funk, and poetry into something truly transcendent." },
   ]);
 
   await db.insert(favorites).values([

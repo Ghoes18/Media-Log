@@ -2,6 +2,8 @@ import type { Express } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
 import { insertReviewSchema } from "@shared/schema";
+import { searchSpotifyAlbums, getSpotifyAlbum } from "./spotify";
+import { searchOpenLibraryBooks, getOpenLibraryBook } from "./openlibrary";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -158,6 +160,52 @@ export async function registerRoutes(
       res.json({ liked: result });
     },
   );
+
+  app.get("/api/search/music", async (req, res) => {
+    const q = req.query.q as string;
+    if (!q) return res.status(400).json({ message: "Query parameter 'q' is required" });
+    try {
+      const results = await searchSpotifyAlbums(q, 10);
+      res.json(results);
+    } catch (err: any) {
+      console.error("Spotify search error:", err.message);
+      res.status(500).json({ message: "Failed to search music" });
+    }
+  });
+
+  app.get("/api/search/music/:albumId", async (req, res) => {
+    try {
+      const album = await getSpotifyAlbum(req.params.albumId);
+      res.json(album);
+    } catch (err: any) {
+      console.error("Spotify album error:", err.message);
+      res.status(500).json({ message: "Failed to get album details" });
+    }
+  });
+
+  app.get("/api/search/books", async (req, res) => {
+    const q = req.query.q as string;
+    if (!q) return res.status(400).json({ message: "Query parameter 'q' is required" });
+    try {
+      const results = await searchOpenLibraryBooks(q, 10);
+      res.json(results);
+    } catch (err: any) {
+      console.error("Open Library search error:", err.message);
+      res.status(500).json({ message: "Failed to search books" });
+    }
+  });
+
+  app.get("/api/search/books/work/:workId", async (req, res) => {
+    try {
+      const workKey = `/works/${req.params.workId}`;
+      const book = await getOpenLibraryBook(workKey);
+      if (!book) return res.status(404).json({ message: "Book not found" });
+      res.json(book);
+    } catch (err: any) {
+      console.error("Open Library book error:", err.message);
+      res.status(500).json({ message: "Failed to get book details" });
+    }
+  });
 
   return httpServer;
 }
