@@ -93,22 +93,30 @@ function Cover({ m }: { m: any }) {
       data-testid={`cover-${m.id}`}
     >
       <div className={cn("absolute inset-0 bg-gradient-to-br", m.coverGradient)} />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/10 to-transparent" />
+      {m.coverUrl && (
+        <img
+          src={m.coverUrl}
+          alt={m.title}
+          className="absolute inset-0 h-full w-full object-cover"
+          loading="lazy"
+        />
+      )}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
       <div className="absolute left-3 top-3">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-2 py-1 text-[11px] font-medium text-white ring-1 ring-white/15">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-2 py-1 text-[11px] font-medium text-white ring-1 ring-white/15 backdrop-blur-sm">
           <Icon className="h-3.5 w-3.5" strokeWidth={2} />
           {m.type.toUpperCase()}
         </span>
       </div>
       <div className="absolute bottom-3 left-3 right-3">
-        <div className="text-sm font-semibold leading-tight text-white">{m.title}</div>
+        <div className="text-sm font-semibold leading-tight text-white drop-shadow-sm">{m.title}</div>
         <div className="mt-0.5 flex items-center justify-between gap-2">
-          <div className="truncate text-xs text-white/80">
+          <div className="truncate text-xs text-white/80 drop-shadow-sm">
             {m.creator}
             {m.year ? ` · ${m.year}` : ""}
           </div>
           {displayRating !== null && (
-            <div className="flex items-center gap-1 rounded-full bg-black/35 px-2 py-1 text-xs text-white ring-1 ring-white/15">
+            <div className="flex items-center gap-1 rounded-full bg-black/35 px-2 py-1 text-xs text-white ring-1 ring-white/15 backdrop-blur-sm">
               <Star className="h-3.5 w-3.5 fill-white/90 text-white/90" />
               {displayRating.toFixed(1)}
             </div>

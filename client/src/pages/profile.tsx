@@ -316,6 +316,9 @@ export default function Profile() {
                       >
                         <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
                           <div className={cn("relative aspect-[3/4] bg-gradient-to-br", m.coverGradient)}>
+                            {m.coverUrl && (
+                              <img src={m.coverUrl} alt={m.title} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
+                            )}
                             <div className="absolute left-2 top-2 rounded-full bg-black/35 p-1 ring-1 ring-white/15">
                               <Icon className="h-3.5 w-3.5 text-white" strokeWidth={2} />
                             </div>

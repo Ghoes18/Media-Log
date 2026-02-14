@@ -243,6 +243,9 @@ export default function MediaDetail() {
                   data-testid="img-media-cover"
                 >
                   <div className={cn("absolute inset-0 bg-gradient-to-br", media.coverGradient)} />
+                  {media.coverUrl && (
+                    <img src={media.coverUrl} alt={media.title} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
+                  )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/10 to-transparent" />
                   <div className="absolute left-3 top-3 rounded-full bg-black/35 p-1 ring-1 ring-white/15">
                     <Icon className="h-4 w-4 text-white" strokeWidth={2} />
@@ -279,9 +282,11 @@ export default function MediaDetail() {
                     </div>
                   </div>
 
-                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground" data-testid="text-synopsis">
-                    No synopsis available yet.
-                  </p>
+                  {media.synopsis && (
+                    <p className="mt-3 text-sm leading-relaxed text-muted-foreground" data-testid="text-synopsis">
+                      {media.synopsis}
+                    </p>
+                  )}
 
                   <div className="mt-3 flex flex-wrap items-center gap-1.5">
                     {(media.tags ?? []).map((t: string) => (

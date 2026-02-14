@@ -49,7 +49,10 @@ function CoverMini({ m }: { m: Media }) {
       data-testid={`img-cover-${m.id}`}
     >
       <div className={cn("absolute inset-0 bg-gradient-to-br", m.coverGradient)} />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-black/10 to-transparent" />
+      {m.coverUrl && (
+        <img src={m.coverUrl} alt={m.title} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
+      )}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
       <div className="absolute left-2 top-2 rounded-full bg-black/35 p-1 ring-1 ring-white/15">
         <Icon className="h-3.5 w-3.5 text-white" strokeWidth={2} />
       </div>

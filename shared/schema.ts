@@ -31,6 +31,8 @@ export const media = pgTable("media", {
   creator: text("creator").default(""),
   year: text("year").default(""),
   coverGradient: text("cover_gradient").notNull(),
+  coverUrl: text("cover_url").default(""),
+  synopsis: text("synopsis").default(""),
   tags: text("tags").array().default(sql`'{}'::text[]`),
   rating: text("rating").default(""),
 });
