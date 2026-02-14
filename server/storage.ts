@@ -61,6 +61,9 @@ export interface IStorage {
     followers: number;
     following: number;
   }>;
+
+  getTopReviewers(limit?: number): Promise<(User & { reviewCount: number })[]>;
+  getPopularReviews(limit?: number): Promise<(Review & { user: User; media: Media; likeCount: number })[]>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -340,6 +343,52 @@ class DatabaseStorage implements IStorage {
       followers: followerCount,
       following: followingCount,
     };
+  }
+
+  async getTopReviewers(
+    limit = 5,
+  ): Promise<(User & { reviewCount: number })[]> {
+    const rows = await db
+      .select({
+        user: users,
+        reviewCount: sql<number>`count(${reviews.id})::int`,
+      })
+      .from(users)
+      .innerJoin(reviews, eq(reviews.userId, users.id))
+      .groupBy(users.id)
+      .orderBy(sql`count(${reviews.id}) desc`)
+      .limit(limit);
+
+    return rows.map((r) => ({
+      ...r.user,
+      reviewCount: r.reviewCount,
+    }));
+  }
+
+  async getPopularReviews(
+    limit = 10,
+  ): Promise<(Review & { user: User; media: Media; likeCount: number })[]> {
+    const rows = await db
+      .select({
+        review: reviews,
+        user: users,
+        media: media,
+        likeCount: sql<number>`coalesce(count(${reviewLikes.reviewId}), 0)::int`,
+      })
+      .from(reviews)
+      .innerJoin(users, eq(reviews.userId, users.id))
+      .innerJoin(media, eq(reviews.mediaId, media.id))
+      .leftJoin(reviewLikes, eq(reviewLikes.reviewId, reviews.id))
+      .groupBy(reviews.id, users.id, media.id)
+      .orderBy(sql`coalesce(count(${reviewLikes.reviewId}), 0) desc`, desc(reviews.createdAt))
+      .limit(limit);
+
+    return rows.map((r) => ({
+      ...r.review,
+      user: r.user,
+      media: r.media,
+      likeCount: r.likeCount,
+    }));
   }
 }
 

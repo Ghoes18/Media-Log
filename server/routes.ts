@@ -9,6 +9,12 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express,
 ): Promise<Server> {
+  app.get("/api/users/top-reviewers", async (req, res) => {
+    const limit = parseInt(req.query.limit as string) || 5;
+    const result = await storage.getTopReviewers(limit);
+    res.json(result);
+  });
+
   app.get("/api/users/:id", async (req, res) => {
     const user = await storage.getUser(req.params.id);
     if (!user) return res.status(404).json({ message: "User not found" });
@@ -46,6 +52,12 @@ export async function registerRoutes(
 
   app.get("/api/media/:id/reviews", async (req, res) => {
     const result = await storage.getReviewsForMedia(req.params.id);
+    res.json(result);
+  });
+
+  app.get("/api/reviews/popular", async (req, res) => {
+    const limit = parseInt(req.query.limit as string) || 10;
+    const result = await storage.getPopularReviews(limit);
     res.json(result);
   });
 

@@ -26,9 +26,9 @@ Full-stack application with PostgreSQL database, Express API, and React frontend
 - `client/src/pages/` - 6 pages: home, discover, profile, media-detail, watchlist, review-create
 
 ## API Routes
-- GET /api/users/:id, GET /api/users/username/:username
+- GET /api/users/top-reviewers, GET /api/users/:id, GET /api/users/username/:username
 - GET /api/media, GET /api/media/:id, GET /api/media/:id/reviews
-- GET /api/reviews/recent, GET /api/users/:id/reviews
+- GET /api/reviews/popular, GET /api/reviews/recent, GET /api/users/:id/reviews
 - POST /api/reviews
 - GET/POST/DELETE /api/users/:id/watchlist/:mediaId
 - GET/PUT /api/users/:id/favorites
@@ -38,6 +38,11 @@ Full-stack application with PostgreSQL database, Express API, and React frontend
 - GET /api/search/music/:albumId
 - GET /api/search/books?q= (Open Library)
 - GET /api/search/books/work/:workId
+
+## Home Page Sections
+- Hero with search, category browse cards, media grid with tabs
+- "Popular Reviews This Week" (sorted by likes, replaces old "Recent Activity")
+- Sidebar: profile preview, favorites, Top Reviewers (ranked by review count), watchlist
 
 ## User Preferences
 - Dark mode by default

@@ -10,6 +10,7 @@ import {
   Plus,
   Search,
   Star,
+  TrendingUp,
   Tv2,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -50,6 +51,14 @@ function mediaIcon(type: MediaType) {
       return Music;
   }
 }
+
+const categories: { type: MediaType; label: string; gradient: string; icon: typeof Film }[] = [
+  { type: "movie", label: "Movies", gradient: "from-violet-600 to-indigo-800", icon: Film },
+  { type: "anime", label: "Anime", gradient: "from-pink-500 to-rose-800", icon: Clapperboard },
+  { type: "book", label: "Books", gradient: "from-amber-500 to-orange-800", icon: BookOpen },
+  { type: "tv", label: "TV Shows", gradient: "from-emerald-500 to-teal-800", icon: Tv2 },
+  { type: "music", label: "Music", gradient: "from-cyan-500 to-blue-800", icon: Music },
+];
 
 function Stars({ value }: { value: number }) {
   const full = Math.floor(value);
@@ -255,8 +264,8 @@ export default function Home() {
       ),
   });
 
-  const { data: reviewsData = [], isLoading: reviewsLoading } = useQuery<any[]>({
-    queryKey: ["/api/reviews/recent"],
+  const { data: popularReviews = [], isLoading: reviewsLoading } = useQuery<any[]>({
+    queryKey: ["/api/reviews/popular"],
   });
 
   const { data: favoritesData = [] } = useQuery<any[]>({
@@ -267,6 +276,10 @@ export default function Home() {
   const { data: watchlistData = [] } = useQuery<any[]>({
     queryKey: [`/api/users/${currentUser?.id}/watchlist`],
     enabled: !!currentUser?.id,
+  });
+
+  const { data: topReviewers = [] } = useQuery<any[]>({
+    queryKey: ["/api/users/top-reviewers"],
   });
 
   const [likedMap, setLikedMap] = useState<Record<string, boolean>>({});
@@ -284,7 +297,7 @@ export default function Home() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/reviews/recent"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reviews/popular"] });
     },
   });
 
@@ -362,6 +375,35 @@ export default function Home() {
               </div>
 
               <Separator className="my-5" />
+
+              <div className="mb-5">
+                <h2 className="mb-3 text-sm font-semibold" data-testid="text-categories-title">
+                  Browse by category
+                </h2>
+                <div className="grid grid-cols-5 gap-2">
+                  {categories.map((cat) => {
+                    const CatIcon = cat.icon;
+                    const isActive = activeTab === cat.type;
+                    return (
+                      <button
+                        key={cat.type}
+                        onClick={() => setActiveTab(isActive ? "all" : cat.type)}
+                        className={cn(
+                          "group relative overflow-hidden rounded-2xl border p-3 text-left transition-all",
+                          isActive
+                            ? "ring-2 ring-primary border-primary/50"
+                            : "hover:border-primary/30",
+                        )}
+                        data-testid={`category-${cat.type}`}
+                      >
+                        <div className={cn("absolute inset-0 bg-gradient-to-br opacity-20", cat.gradient)} />
+                        <CatIcon className={cn("relative h-5 w-5 mb-1.5", isActive ? "text-primary" : "text-foreground/70")} strokeWidth={2} />
+                        <div className={cn("relative text-xs font-medium", isActive ? "text-primary" : "text-foreground/80")}>{cat.label}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <Tabs
@@ -448,12 +490,15 @@ export default function Home() {
 
             <div className="mt-6">
               <div className="flex items-end justify-between">
-                <h2 className="font-serif text-xl font-semibold" data-testid="text-activity-title">
-                  Recent activity
-                </h2>
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-primary" />
+                  <h2 className="font-serif text-xl font-semibold" data-testid="text-popular-title">
+                    Popular reviews this week
+                  </h2>
+                </div>
                 <Link
                   href="/discover"
-                  data-testid="link-activity-more"
+                  data-testid="link-popular-more"
                   className="text-sm font-medium text-primary hover:opacity-80"
                 >
                   Browse
@@ -469,7 +514,7 @@ export default function Home() {
                     />
                   ))
                 ) : (
-                  reviewsData.map((r: any) => {
+                  popularReviews.map((r: any) => {
                     const isLiked = likedMap[r.id] ?? false;
                     const likeCount = r.likeCount + (isLiked ? 1 : 0);
                     return (
@@ -651,6 +696,53 @@ export default function Home() {
                     </Link>
                   ))}
                 </div>
+              </div>
+            </Card>
+
+            <Card className="glass bg-noise rounded-3xl p-5" data-testid="card-top-reviewers">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-primary" />
+                <div className="font-serif text-lg font-semibold" data-testid="text-top-reviewers-title">
+                  Top Reviewers
+                </div>
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">Most active members</div>
+
+              <Separator className="my-4" />
+
+              <div className="space-y-3">
+                {topReviewers.map((reviewer: any, idx: number) => (
+                  <Link key={reviewer.id} href={`/u/${reviewer.username}`} data-testid={`link-reviewer-${reviewer.id}`}>
+                    <div className="flex items-center gap-3 rounded-2xl border bg-card/60 p-3 hover:bg-card/80 transition">
+                      <div className={cn(
+                        "flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold",
+                        idx === 0 ? "bg-amber-500/20 text-amber-500" :
+                        idx === 1 ? "bg-zinc-400/20 text-zinc-400" :
+                        idx === 2 ? "bg-orange-600/20 text-orange-600" :
+                        "bg-muted text-muted-foreground"
+                      )}>
+                        {idx + 1}
+                      </div>
+                      <Avatar className="h-8 w-8 ring-1 ring-border" data-testid={`avatar-reviewer-${reviewer.id}`}>
+                        <AvatarImage alt={reviewer.displayName} src={reviewer.avatarUrl ?? ""} />
+                        <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20 text-xs">
+                          {reviewer.displayName?.slice(0, 1) ?? "?"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold" data-testid={`text-reviewer-name-${reviewer.id}`}>
+                          {reviewer.displayName}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          @{reviewer.username}
+                        </div>
+                      </div>
+                      <Badge variant="secondary" className="rounded-full" data-testid={`badge-review-count-${reviewer.id}`}>
+                        {reviewer.reviewCount} reviews
+                      </Badge>
+                    </div>
+                  </Link>
+                ))}
               </div>
             </Card>
 
