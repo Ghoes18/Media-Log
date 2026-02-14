@@ -47,7 +47,8 @@ async function spotifyFetch(endpoint: string) {
 }
 
 async function musicBrainzSearch(query: string, limit = 10) {
-  const url = `https://musicbrainz.org/ws/2/release-group/?query=release-group:"${encodeURIComponent(query)}" OR artist:"${encodeURIComponent(query)}"&type=album&limit=${limit}&fmt=json`;
+  const luceneQuery = `release-group:"${query}" OR artist:"${query}"`;
+  const url = `https://musicbrainz.org/ws/2/release-group/?query=${encodeURIComponent(luceneQuery)}&type=album&limit=${limit}&fmt=json`;
   const res = await fetch(url, {
     headers: { 'User-Agent': 'Tastelog/1.0 (tastelog@replit.app)' },
   });
