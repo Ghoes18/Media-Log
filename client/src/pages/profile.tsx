@@ -2,6 +2,7 @@ import { Link, useParams } from "wouter";
 import { motion } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth-context";
 import {
   ArrowLeft,
   BookOpen,
@@ -57,21 +58,17 @@ function timeAgo(dateStr: string) {
 
 export default function Profile() {
   const params = useParams<{ handle: string }>();
-  const handle = params.handle ?? "alice";
+  const handle = params.handle ?? "";
   const queryClient = useQueryClient();
-
-  const isMe = handle === "alice";
-
-  const { data: currentUser } = useQuery<any>({
-    queryKey: ["/api/users/username/alice"],
-    enabled: !isMe,
-  });
+  const { currentUser } = useAuth();
 
   const { data: profileUser, isLoading: profileLoading } = useQuery<any>({
     queryKey: [`/api/users/username/${handle}`],
+    enabled: !!handle,
   });
 
   const userId = profileUser?.id;
+  const isMe = !!(currentUser && profileUser && (profileUser.id === currentUser.id || profileUser.username === currentUser.username));
   const currentUserId = isMe ? userId : currentUser?.id;
 
   const { data: favorites = [], isLoading: favoritesLoading } = useQuery<any[]>({
@@ -112,7 +109,7 @@ export default function Profile() {
 
   if (profileLoading) {
     return (
-      <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30 flex items-center justify-center">
+      <div className="min-h-dvh bg-background flex items-center justify-center">
         <div className="text-muted-foreground">Loading profile…</div>
       </div>
     );
@@ -120,7 +117,7 @@ export default function Profile() {
 
   if (!profileUser) {
     return (
-      <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30 flex items-center justify-center">
+      <div className="min-h-dvh bg-background flex items-center justify-center">
         <div className="text-muted-foreground">User not found</div>
       </div>
     );
@@ -139,13 +136,13 @@ export default function Profile() {
   };
 
   return (
-    <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30">
+    <div className="min-h-dvh bg-background">
       <header className="sticky top-0 z-30 border-b bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
         <div className="mx-auto grid max-w-6xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:flex sm:gap-3">
           <Button
             variant="secondary"
             size="icon"
-            className="h-10 w-10 rounded-xl"
+            className="h-10 w-10 rounded-md"
             data-testid="button-back"
             asChild
           >
@@ -169,14 +166,14 @@ export default function Profile() {
                 <Button
                   variant="secondary"
                   size="icon"
-                  className="h-10 w-10 rounded-xl sm:hidden"
+                  className="h-10 w-10 rounded-md sm:hidden"
                   data-testid="button-settings"
                 >
                   <Settings2 className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="secondary"
-                  className="hidden h-10 rounded-xl sm:inline-flex"
+                  className="hidden h-10 rounded-md sm:inline-flex"
                   data-testid="button-edit-profile"
                 >
                   <Settings2 className="mr-2 h-4 w-4" />
@@ -185,7 +182,7 @@ export default function Profile() {
               </>
             ) : (
               <Button
-                className="h-10 rounded-xl"
+                className="h-10 rounded-md"
                 variant={following ? "secondary" : "default"}
                 data-testid="button-follow"
                 onClick={() => followMutation.mutate()}
@@ -214,14 +211,14 @@ export default function Profile() {
         <div className="mx-auto max-w-6xl px-4 pb-3 sm:hidden">
           <div className="flex items-center justify-between gap-2 overflow-x-auto">
             <Tabs defaultValue="overview" className="w-full min-w-0" data-testid="tabs-profile">
-              <TabsList className="w-full rounded-2xl border bg-card/60 p-1" data-testid="tabs-list-profile">
-                <TabsTrigger value="overview" className="flex-1 rounded-xl" data-testid="tab-overview">
+              <TabsList className="w-full rounded-md border bg-card/60 p-1" data-testid="tabs-list-profile">
+                <TabsTrigger value="overview" className="flex-1 rounded-md" data-testid="tab-overview">
                   Overview
                 </TabsTrigger>
-                <TabsTrigger value="faves" className="flex-1 rounded-xl" data-testid="tab-faves">
+                <TabsTrigger value="faves" className="flex-1 rounded-md" data-testid="tab-faves">
                   Favorites
                 </TabsTrigger>
-                <TabsTrigger value="activity" className="flex-1 rounded-xl" data-testid="tab-activity">
+                <TabsTrigger value="activity" className="flex-1 rounded-md" data-testid="tab-activity">
                   Activity
                 </TabsTrigger>
               </TabsList>
@@ -238,11 +235,11 @@ export default function Profile() {
           className="grid gap-6 lg:grid-cols-[.9fr_1.1fr] min-w-0"
         >
           <section className="space-y-4">
-            <Card className="glass bg-noise rounded-3xl p-5 sm:p-7 min-w-0" data-testid="card-profile-header">
+            <Card className="glass bg-noise rounded-lg p-5 sm:p-7 min-w-0" data-testid="card-profile-header">
               <div className="flex items-start gap-4">
                 <Avatar className="h-14 w-14 shrink-0 ring-1 ring-border" data-testid="avatar-profile">
                   <AvatarImage alt={profile.name} src={profile.avatarUrl} />
-                  <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
+                  <AvatarFallback className="bg-primary/15">
                     {profile.name.slice(0, 1)}
                   </AvatarFallback>
                 </Avatar>
@@ -268,15 +265,15 @@ export default function Profile() {
                   <Separator className="my-4" />
 
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="rounded-2xl border bg-card/60 p-3" data-testid="stat-reviews">
+                    <div className="rounded-md border bg-card/60 p-3" data-testid="stat-reviews">
                       <div className="text-xs text-muted-foreground">Reviews</div>
                       <div className="mt-1 font-serif text-lg font-semibold">{profile.stats.reviews}</div>
                     </div>
-                    <div className="rounded-2xl border bg-card/60 p-3" data-testid="stat-followers">
+                    <div className="rounded-md border bg-card/60 p-3" data-testid="stat-followers">
                       <div className="text-xs text-muted-foreground">Followers</div>
                       <div className="mt-1 font-serif text-lg font-semibold">{profile.stats.followers}</div>
                     </div>
-                    <div className="rounded-2xl border bg-card/60 p-3" data-testid="stat-following">
+                    <div className="rounded-md border bg-card/60 p-3" data-testid="stat-following">
                       <div className="text-xs text-muted-foreground">Following</div>
                       <div className="mt-1 font-serif text-lg font-semibold">{profile.stats.following}</div>
                     </div>
@@ -285,7 +282,7 @@ export default function Profile() {
               </div>
             </Card>
 
-            <Card className="glass bg-noise rounded-3xl p-5 sm:p-7 overflow-hidden" data-testid="card-favorites">
+            <Card className="rounded-lg border border-border bg-card p-5 sm:p-7 overflow-hidden" data-testid="card-favorites">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="font-serif text-lg font-semibold" data-testid="text-favorites-title">
@@ -295,7 +292,7 @@ export default function Profile() {
                     A little shelf of you.
                   </div>
                 </div>
-                <Button variant="secondary" className="rounded-xl" data-testid="button-edit-favorites">
+                <Button variant="secondary" className="rounded-md" data-testid="button-edit-favorites">
                   Edit
                 </Button>
               </div>
@@ -317,8 +314,8 @@ export default function Profile() {
                         data-testid={`link-favorite-${m.id}`}
                         className="group"
                       >
-                        <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-                          <div className={cn("relative aspect-[3/4] bg-gradient-to-br", m.coverGradient)}>
+                        <div className="overflow-hidden rounded-md border bg-card shadow-sm">
+                          <div className={cn("relative aspect-[3/4] bg-gradient-to-br grayscale contrast-125", m.coverGradient)}>
                             {m.coverUrl && (
                               <img src={m.coverUrl} alt={m.title} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
                             )}
@@ -334,7 +331,7 @@ export default function Profile() {
               )}
             </Card>
 
-            <Card className="glass bg-noise rounded-3xl p-5 sm:p-7 overflow-hidden" data-testid="card-watchlist">
+            <Card className="rounded-lg border border-border bg-card p-5 sm:p-7 overflow-hidden" data-testid="card-watchlist">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="font-serif text-lg font-semibold" data-testid="text-watchlist-title">
@@ -366,7 +363,7 @@ export default function Profile() {
                       key={m.id}
                       href={`/m/${m.id}`}
                       data-testid={`link-watch-${m.id}`}
-                      className="rounded-2xl border bg-card/60 px-3 py-2 text-sm font-medium hover:bg-card/80 transition"
+                      className="rounded-md border bg-card/60 px-3 py-2 text-sm font-medium hover:bg-card/80 transition"
                     >
                       {m.title}
                     </Link>
@@ -377,7 +374,7 @@ export default function Profile() {
           </section>
 
           <section>
-            <Card className="glass bg-noise rounded-3xl p-5 sm:p-7 overflow-hidden" data-testid="card-activity">
+            <Card className="rounded-lg border border-border bg-card p-5 sm:p-7 overflow-hidden" data-testid="card-activity">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="font-serif text-lg font-semibold" data-testid="text-activity-title">
@@ -387,7 +384,7 @@ export default function Profile() {
                     Reviews, likes, and saves.
                   </div>
                 </div>
-                <Button variant="secondary" className="rounded-xl" data-testid="button-activity-filter">
+                <Button variant="secondary" className="rounded-md" data-testid="button-activity-filter">
                   Filter
                 </Button>
               </div>
@@ -402,14 +399,14 @@ export default function Profile() {
                 <div className="space-y-3">
                   {userReviews.map((r: any) => (
                     <Link key={r.id} href={`/m/${r.media?.id ?? r.mediaId}`} data-testid={`link-activity-${r.id}`}>
-                      <Card className="rounded-3xl border bg-card/60 p-4 hover:bg-card/80 transition">
+                      <Card className="rounded-lg border bg-card/60 p-4 hover:bg-card/80 transition">
                         <div className="flex items-start gap-3">
                           <div
                             className={cn(
-                              "relative h-12 w-10 shrink-0 overflow-hidden rounded-2xl border bg-card shadow-sm",
+                              "relative h-12 w-10 shrink-0 overflow-hidden rounded-md border bg-card shadow-sm",
                             )}
                           >
-                            <div className={cn("h-full w-full bg-gradient-to-br", r.media?.coverGradient ?? "")} />
+                            <div className={cn("h-full w-full bg-gradient-to-br grayscale contrast-125", r.media?.coverGradient ?? "")} />
                             {r.media?.coverUrl && (
                               <img src={r.media.coverUrl} alt={r.media.title} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
                             )}
@@ -438,7 +435,7 @@ export default function Profile() {
         </motion.div>
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
+      <div className="font-brand fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link
             href="/"

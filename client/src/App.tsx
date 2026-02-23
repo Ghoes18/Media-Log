@@ -3,7 +3,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import { queryClient } from "./lib/queryClient";
-
+import { AuthProvider } from "./lib/auth-context";
 import { ThemeProvider } from "@/components/theme-provider";
 
 import NotFound from "./pages/not-found";
@@ -13,11 +13,13 @@ import Watchlist from "./pages/watchlist";
 import ReviewCreate from "./pages/review-create";
 import Profile from "./pages/profile";
 import MediaDetail from "./pages/media-detail";
+import SignIn from "./pages/signin";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/signin" component={SignIn} />
       <Route path="/discover" component={Discover} />
       <Route path="/watchlist" component={Watchlist} />
       <Route path="/review/new" component={ReviewCreate} />
@@ -32,10 +34,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
+        <AuthProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Router />
+          </TooltipProvider>
+        </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

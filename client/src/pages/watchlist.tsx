@@ -1,14 +1,16 @@
-import { useMemo, useState } from "react";
-import { Link } from "wouter";
+import { useMemo, useState, useEffect } from "react";
+import { Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth-context";
 import {
   ArrowLeft,
   BookOpen,
   Check,
   Clapperboard,
   Film,
+  Gamepad2,
   Music,
   Star,
   Trash2,
@@ -22,7 +24,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-type MediaType = "movie" | "anime" | "book" | "tv" | "music";
+type MediaType = "movie" | "anime" | "book" | "tv" | "music" | "game";
 
 function iconFor(type: MediaType) {
   switch (type) {
@@ -36,6 +38,8 @@ function iconFor(type: MediaType) {
       return Tv2;
     case "music":
       return Music;
+    case "game":
+      return Gamepad2;
   }
 }
 
@@ -43,10 +47,12 @@ export default function Watchlist() {
   const [activeTab, setActiveTab] = useState<MediaType | "all">("all");
   const [done, setDone] = useState<Record<string, boolean>>({});
   const queryClient = useQueryClient();
+  const { currentUser, isLoading: authLoading } = useAuth();
+  const [, navigate] = useLocation();
 
-  const { data: currentUser } = useQuery<any>({
-    queryKey: ["/api/users/username/alice"],
-  });
+  useEffect(() => {
+    if (!authLoading && !currentUser) navigate("/signin");
+  }, [authLoading, currentUser, navigate]);
 
   const { data: items = [], isLoading } = useQuery<any[]>({
     queryKey: [`/api/users/${currentUser?.id}/watchlist`],
@@ -55,10 +61,11 @@ export default function Watchlist() {
 
   const removeFromWatchlist = useMutation({
     mutationFn: async (mediaId: string) => {
+      if (!currentUser) return;
       await apiRequest("DELETE", `/api/users/${currentUser.id}/watchlist/${mediaId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/users/${currentUser.id}/watchlist`] });
+      if (currentUser) queryClient.invalidateQueries({ queryKey: [`/api/users/${currentUser.id}/watchlist`] });
     },
   });
 
@@ -67,22 +74,22 @@ export default function Watchlist() {
     return items.filter((i: any) => i.type === activeTab);
   }, [items, activeTab]);
 
-  if (isLoading || !currentUser) {
+  if (authLoading || isLoading || !currentUser) {
     return (
-      <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30 flex items-center justify-center">
+      <div className="min-h-dvh bg-background flex items-center justify-center">
         <div className="text-muted-foreground" data-testid="loading-watchlist">Loading…</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30">
+    <div className="min-h-dvh bg-background">
       <header className="sticky top-0 z-30 border-b bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
           <Button
             variant="secondary"
             size="icon"
-            className="rounded-xl"
+            className="rounded-md"
             data-testid="button-back"
             asChild
           >
@@ -103,7 +110,7 @@ export default function Watchlist() {
           <div className="ml-auto">
             <Button
               variant="secondary"
-              className="rounded-xl"
+              className="rounded-md"
               data-testid="button-clear-done"
               onClick={() => setDone({})}
             >
@@ -119,7 +126,7 @@ export default function Watchlist() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
         >
-          <Card className="glass bg-noise rounded-3xl p-5 sm:p-7" data-testid="card-watchlist-controls">
+          <Card className="glass bg-noise rounded-lg p-5 sm:p-7" data-testid="card-watchlist-controls">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <div
@@ -138,21 +145,24 @@ export default function Watchlist() {
               </div>
 
               <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-                <TabsList className="grid w-full grid-cols-5 rounded-2xl bg-muted/50 p-1 sm:w-[420px]">
-                  <TabsTrigger value="all" className="rounded-xl" data-testid="tab-all">
+                <TabsList className="grid w-full grid-cols-6 rounded-md bg-muted/50 p-1 sm:w-[500px]">
+                  <TabsTrigger value="all" className="rounded-md" data-testid="tab-all">
                     All
                   </TabsTrigger>
-                  <TabsTrigger value="movie" className="rounded-xl" data-testid="tab-movie">
+                  <TabsTrigger value="movie" className="rounded-md" data-testid="tab-movie">
                     Movies
                   </TabsTrigger>
-                  <TabsTrigger value="anime" className="rounded-xl" data-testid="tab-anime">
+                  <TabsTrigger value="anime" className="rounded-md" data-testid="tab-anime">
                     Anime
                   </TabsTrigger>
-                  <TabsTrigger value="book" className="rounded-xl" data-testid="tab-book">
+                  <TabsTrigger value="book" className="rounded-md" data-testid="tab-book">
                     Books
                   </TabsTrigger>
-                  <TabsTrigger value="tv" className="rounded-xl" data-testid="tab-tv">
+                  <TabsTrigger value="tv" className="rounded-md" data-testid="tab-tv">
                     TV
+                  </TabsTrigger>
+                  <TabsTrigger value="game" className="rounded-md" data-testid="tab-game">
+                    Games
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -168,17 +178,17 @@ export default function Watchlist() {
                   <Card
                     key={it.id}
                     className={cn(
-                      "glass bg-noise rounded-3xl p-4 sm:p-5 transition",
+                      "rounded-lg border border-border bg-card p-4 sm:p-5 transition",
                       isDone ? "opacity-80" : "hover:opacity-[0.98]",
                     )}
                     data-testid={`row-item-${it.id}`}
                   >
                     <div className="flex items-center gap-4">
                       <div
-                        className="relative h-20 w-16 overflow-hidden rounded-2xl border bg-card shadow-sm"
+                        className="relative h-20 w-16 overflow-hidden rounded-md border bg-card shadow-sm"
                         data-testid={`img-cover-${it.id}`}
                       >
-                        <div className={cn("absolute inset-0 bg-gradient-to-br", it.coverGradient)} />
+                        <div className={cn("absolute inset-0 bg-gradient-to-br grayscale contrast-125", it.coverGradient)} />
                         {it.coverUrl && (
                           <img src={it.coverUrl} alt={it.title} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
                         )}
@@ -226,7 +236,7 @@ export default function Watchlist() {
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                           <Button
                             size="sm"
-                            className="rounded-xl"
+                            className="rounded-md"
                             variant={isDone ? "secondary" : "default"}
                             data-testid={`button-done-${it.id}`}
                             onClick={() => setDone((p) => ({ ...p, [it.id]: !p[it.id] }))}
@@ -237,7 +247,7 @@ export default function Watchlist() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="rounded-xl"
+                            className="rounded-md"
                             data-testid={`button-remove-${it.id}`}
                             onClick={() => removeFromWatchlist.mutate(it.id)}
                           >
@@ -252,13 +262,13 @@ export default function Watchlist() {
               })}
 
               {filtered.length === 0 ? (
-                <div className="rounded-3xl border bg-card/60 p-10 text-center" data-testid="empty-watchlist">
+                <div className="rounded-lg border bg-card/60 p-10 text-center" data-testid="empty-watchlist">
                   <div className="font-serif text-xl font-semibold">Nothing here (yet).</div>
                   <p className="mt-2 text-sm text-muted-foreground">
                     Switch the filter or add a few items from Discover.
                   </p>
                   <div className="mt-4">
-                    <Button className="rounded-xl" data-testid="button-go-discover" asChild>
+                    <Button className="rounded-md" data-testid="button-go-discover" asChild>
                       <Link href="/discover" data-testid="link-go-discover">
                         Browse Discover
                       </Link>
@@ -271,7 +281,7 @@ export default function Watchlist() {
         </motion.div>
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
+      <div className="font-brand fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link
             href="/"

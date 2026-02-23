@@ -1,37 +1,39 @@
-let connectionSettings: any;
+let cachedToken: { token: string; expiresAt: number } | null = null;
 
 async function getAccessToken(): Promise<string> {
-  if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
-    return connectionSettings.settings.access_token;
+  if (cachedToken && cachedToken.expiresAt > Date.now() + 60_000) {
+    return cachedToken.token;
   }
 
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
-  const xReplitToken = process.env.REPL_IDENTITY
-    ? 'repl ' + process.env.REPL_IDENTITY
-    : process.env.WEB_REPL_RENEWAL
-    ? 'depl ' + process.env.WEB_REPL_RENEWAL
-    : null;
+  const clientId = process.env.SPOTIFY_CLIENT_ID;
+  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
 
-  if (!xReplitToken) {
-    throw new Error('X_REPLIT_TOKEN not found');
+  if (!clientId || !clientSecret) {
+    throw new Error("SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET must be set in .env");
   }
 
-  connectionSettings = await fetch(
-    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=spotify',
-    {
-      headers: {
-        'Accept': 'application/json',
-        'X_REPLIT_TOKEN': xReplitToken
-      }
-    }
-  ).then(res => res.json()).then(data => data.items?.[0]);
+  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  const res = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Basic ${credentials}`,
+    },
+    body: "grant_type=client_credentials",
+  });
 
-  const accessToken = connectionSettings?.settings?.access_token || connectionSettings?.settings?.oauth?.credentials?.access_token;
-
-  if (!accessToken) {
-    throw new Error('Spotify not connected');
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Spotify token ${res.status}: ${body}`);
   }
-  return accessToken;
+
+  const data = (await res.json()) as { access_token: string; expires_in: number };
+  const expiresInMs = (data.expires_in - 60) * 1000;
+  cachedToken = {
+    token: data.access_token,
+    expiresAt: Date.now() + expiresInMs,
+  };
+  return cachedToken.token;
 }
 
 async function spotifyFetch(endpoint: string) {
@@ -50,7 +52,7 @@ async function musicBrainzSearch(query: string, limit = 10) {
   const luceneQuery = `release-group:"${query}" OR artist:"${query}"`;
   const url = `https://musicbrainz.org/ws/2/release-group/?query=${encodeURIComponent(luceneQuery)}&type=album&limit=${limit}&fmt=json`;
   const res = await fetch(url, {
-    headers: { 'User-Agent': 'Tastelog/1.0 (tastelog@replit.app)' },
+    headers: { "User-Agent": "Tastelog/1.0 (https://github.com/tastelog)" },
   });
   if (!res.ok) return [];
   const data = await res.json();
@@ -140,7 +142,7 @@ export async function getSpotifyAlbum(albumId: string) {
 export async function getMusicBrainzAlbum(mbid: string) {
   const url = `https://musicbrainz.org/ws/2/release-group/${mbid}?inc=artists+tags&fmt=json`;
   const res = await fetch(url, {
-    headers: { 'User-Agent': 'Tastelog/1.0 (tastelog@replit.app)' },
+    headers: { "User-Agent": "Tastelog/1.0 (https://github.com/tastelog)" },
   });
   if (!res.ok) return null;
   const rg = await res.json();

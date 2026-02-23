@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
 import {
@@ -6,12 +6,14 @@ import {
   BookOpen,
   Clapperboard,
   Film,
+  Gamepad2,
   Music,
   Star,
   Tv2,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -22,9 +24,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
 
-type MediaType = "movie" | "anime" | "book" | "tv" | "music";
+type MediaType = "movie" | "anime" | "book" | "tv" | "music" | "game";
 
 function iconFor(type: MediaType) {
   switch (type) {
@@ -38,24 +39,27 @@ function iconFor(type: MediaType) {
       return Tv2;
     case "music":
       return Music;
+    case "game":
+      return Gamepad2;
   }
 }
 
 export default function ReviewCreate() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
+  const { currentUser, isLoading: authLoading } = useAuth();
   const [medium, setMedium] = useState<MediaType>("movie");
   const [title, setTitle] = useState("");
   const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
   const [rating, setRating] = useState(4);
   const [text, setText] = useState("");
 
+  useEffect(() => {
+    if (!authLoading && !currentUser) navigate("/signin");
+  }, [authLoading, currentUser, navigate]);
+
   const { data: allMedia = [], isLoading: mediaLoading } = useQuery<any[]>({
     queryKey: ["/api/media"],
-  });
-
-  const { data: currentUser } = useQuery<any>({
-    queryKey: ["/api/users/username/alice"],
   });
 
   const quickPick = useMemo(() => {
@@ -76,7 +80,7 @@ export default function ReviewCreate() {
   }, [title, allMedia, selectedMediaId]);
 
   const publishMutation = useMutation({
-    mutationFn: async (data: { userId: string; mediaId: string; rating: number; body: string }) => {
+    mutationFn: async (data: { mediaId: string; rating: number; body: string }) => {
       const res = await apiRequest("POST", "/api/reviews", data);
       return res.json();
     },
@@ -99,7 +103,6 @@ export default function ReviewCreate() {
   const handlePublish = () => {
     if (!currentUser || !selectedMediaId) return;
     publishMutation.mutate({
-      userId: currentUser.id,
       mediaId: selectedMediaId,
       rating,
       body: text,
@@ -121,14 +124,22 @@ export default function ReviewCreate() {
     setSelectedMediaId(m.id);
   };
 
+  if (authLoading || !currentUser) {
+    return (
+      <div className="min-h-dvh bg-background flex items-center justify-center">
+        <div className="text-muted-foreground">Loading…</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30">
+    <div className="min-h-dvh bg-background">
       <header className="sticky top-0 z-30 border-b bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
           <Button
             variant="secondary"
             size="icon"
-            className="rounded-xl"
+            className="rounded-md"
             data-testid="button-back"
             asChild
           >
@@ -156,7 +167,7 @@ export default function ReviewCreate() {
           className="grid gap-6 lg:grid-cols-[.9fr_1.1fr]"
         >
           <section>
-            <Card className="glass bg-noise rounded-3xl p-5 sm:p-7" data-testid="card-editor">
+            <Card className="glass bg-noise rounded-lg p-5 sm:p-7" data-testid="card-editor">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div
@@ -173,7 +184,7 @@ export default function ReviewCreate() {
                     Keep it specific. Keep it honest.
                   </p>
                 </div>
-                <div className="rounded-2xl border bg-card/60 px-3 py-2" data-testid="pill-medium">
+                <div className="rounded-md border bg-card/60 px-3 py-2" data-testid="pill-medium">
                   <div className="flex items-center gap-2 text-sm font-semibold">
                     <Icon className="h-4 w-4 text-primary" />
                     {medium.toUpperCase()}
@@ -194,7 +205,7 @@ export default function ReviewCreate() {
                       setTitle("");
                     }}
                   >
-                    <SelectTrigger className="rounded-2xl" data-testid="select-medium">
+                    <SelectTrigger className="rounded-md" data-testid="select-medium">
                       <SelectValue placeholder="Select medium" />
                     </SelectTrigger>
                     <SelectContent>
@@ -213,6 +224,9 @@ export default function ReviewCreate() {
                       <SelectItem value="music" data-testid="option-medium-music">
                         Music
                       </SelectItem>
+                      <SelectItem value="game" data-testid="option-medium-game">
+                        Video Game
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -224,11 +238,11 @@ export default function ReviewCreate() {
                       value={title}
                       onChange={(e) => handleTitleChange(e.target.value)}
                       placeholder="Search or type a title…"
-                      className="rounded-2xl"
+                      className="rounded-md"
                       data-testid="input-title"
                     />
                     {titleMatches.length > 0 && (
-                      <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-2xl border bg-card shadow-lg">
+                      <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-md border bg-card shadow-lg">
                         {titleMatches.map((m: any) => (
                           <button
                             key={m.id}
@@ -273,7 +287,7 @@ export default function ReviewCreate() {
                           key={v}
                           variant={v <= rating ? "default" : "secondary"}
                           size="icon"
-                          className={cn("h-10 w-10 rounded-xl", v <= rating ? "" : "")}
+                          className="h-10 w-10 rounded-md"
                           data-testid={`button-star-${v}`}
                           onClick={() => setRating(v)}
                         >
@@ -293,7 +307,7 @@ export default function ReviewCreate() {
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                     placeholder="What did it taste like? A mood, a color, a quote…"
-                    className="min-h-[160px] rounded-2xl"
+                    className="min-h-[160px] rounded-md"
                     data-testid="input-review-text"
                   />
                 </div>
@@ -301,14 +315,14 @@ export default function ReviewCreate() {
                 <div className="flex items-center justify-between">
                   <Button
                     variant="secondary"
-                    className="rounded-xl"
+                    className="rounded-md"
                     data-testid="button-save-draft"
                     onClick={() => {}}
                   >
                     Save draft
                   </Button>
                   <Button
-                    className="rounded-xl"
+                    className="rounded-md"
                     data-testid="button-publish"
                     disabled={!canPublish}
                     onClick={handlePublish}
@@ -321,7 +335,7 @@ export default function ReviewCreate() {
           </section>
 
           <section className="space-y-4">
-            <Card className="glass bg-noise rounded-3xl p-5 sm:p-7" data-testid="card-preview">
+            <Card className="rounded-lg border border-border bg-card p-5 sm:p-7" data-testid="card-preview">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="font-serif text-lg font-semibold" data-testid="text-preview-title">
@@ -338,7 +352,7 @@ export default function ReviewCreate() {
 
               <Separator className="my-4" />
 
-              <div className="rounded-3xl border bg-card/60 p-4" data-testid="preview-card">
+              <div className="rounded-lg border bg-card/60 p-4" data-testid="preview-card">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-sm font-semibold" data-testid="text-preview-author">
@@ -359,7 +373,7 @@ export default function ReviewCreate() {
               </div>
             </Card>
 
-            <Card className="glass bg-noise rounded-3xl p-5 sm:p-7" data-testid="card-guidelines">
+            <Card className="rounded-lg border border-border bg-card p-5 sm:p-7" data-testid="card-guidelines">
               <div className="font-serif text-lg font-semibold" data-testid="text-guidelines-title">
                 A quick rubric
               </div>
@@ -368,13 +382,13 @@ export default function ReviewCreate() {
               </p>
               <Separator className="my-4" />
               <div className="grid gap-2 text-sm">
-                <div className="rounded-2xl border bg-card/60 px-3 py-2" data-testid="tip-1">
+                <div className="rounded-md border bg-card/60 px-3 py-2" data-testid="tip-1">
                   Open with the vibe.
                 </div>
-                <div className="rounded-2xl border bg-card/60 px-3 py-2" data-testid="tip-2">
+                <div className="rounded-md border bg-card/60 px-3 py-2" data-testid="tip-2">
                   Name one specific moment.
                 </div>
-                <div className="rounded-2xl border bg-card/60 px-3 py-2" data-testid="tip-3">
+                <div className="rounded-md border bg-card/60 px-3 py-2" data-testid="tip-3">
                   End with a punchline.
                 </div>
               </div>
@@ -383,7 +397,7 @@ export default function ReviewCreate() {
         </motion.div>
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
+      <div className="font-brand fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link
             href="/"

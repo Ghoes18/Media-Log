@@ -62,8 +62,29 @@ export interface IStorage {
     following: number;
   }>;
 
+  getOrCreateAppUser(
+    authUserId: string,
+    data: { name?: string | null; email?: string | null },
+  ): Promise<User>;
+
   getTopReviewers(limit?: number): Promise<(User & { reviewCount: number })[]>;
   getPopularReviews(limit?: number): Promise<(Review & { user: User; media: Media; likeCount: number })[]>;
+}
+
+function slugUsername(name: string | undefined | null, email: string | undefined | null): string {
+  if (name?.trim()) {
+    return name
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "")
+      .slice(0, 30) || "user";
+  }
+  if (email) {
+    const local = email.split("@")[0]?.trim();
+    return (local?.toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 30)) || "user";
+  }
+  return "user";
 }
 
 class DatabaseStorage implements IStorage {
@@ -343,6 +364,35 @@ class DatabaseStorage implements IStorage {
       followers: followerCount,
       following: followingCount,
     };
+  }
+
+  async getOrCreateAppUser(
+    authUserId: string,
+    data: { name?: string | null; email?: string | null },
+  ): Promise<User> {
+    const existing = await this.getUser(authUserId);
+    if (existing) return existing;
+
+    let baseUsername = slugUsername(data.name, data.email);
+    let username = baseUsername;
+    let n = 1;
+    while (await this.getUserByUsername(username)) {
+      username = `${baseUsername}-${n}`;
+      n += 1;
+    }
+
+    const displayName = (data.name?.trim() || data.email?.split("@")[0] || "User").slice(0, 100);
+    const [user] = await db
+      .insert(users)
+      .values({
+        id: authUserId,
+        username,
+        displayName,
+        bio: "",
+        avatarUrl: "",
+      })
+      .returning();
+    return user;
   }
 
   async getTopReviewers(

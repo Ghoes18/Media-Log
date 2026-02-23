@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
 import {
   BookOpen,
   Clapperboard,
   Film,
+  Gamepad2,
   Heart,
-  Loader2,
   Music,
   Plus,
   Search,
@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth-context";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -36,7 +37,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-type MediaType = "movie" | "anime" | "book" | "tv" | "music";
+type MediaType = "movie" | "anime" | "book" | "tv" | "music" | "game";
 
 function mediaIcon(type: MediaType) {
   switch (type) {
@@ -50,16 +51,10 @@ function mediaIcon(type: MediaType) {
       return Tv2;
     case "music":
       return Music;
+    case "game":
+      return Gamepad2;
   }
 }
-
-const categories: { type: MediaType; label: string; gradient: string; icon: typeof Film }[] = [
-  { type: "movie", label: "Movies", gradient: "from-violet-600 to-indigo-800", icon: Film },
-  { type: "anime", label: "Anime", gradient: "from-pink-500 to-rose-800", icon: Clapperboard },
-  { type: "book", label: "Books", gradient: "from-amber-500 to-orange-800", icon: BookOpen },
-  { type: "tv", label: "TV Shows", gradient: "from-emerald-500 to-teal-800", icon: Tv2 },
-  { type: "music", label: "Music", gradient: "from-cyan-500 to-blue-800", icon: Music },
-];
 
 function Stars({ value }: { value: number }) {
   const full = Math.floor(value);
@@ -101,12 +96,12 @@ function Cover({ m }: { m: any }) {
   return (
     <div
       className={cn(
-        "relative aspect-[3/4] w-full overflow-hidden rounded-xl border bg-card shadow-sm",
+        "relative aspect-[3/4] w-full overflow-hidden rounded-md border bg-card shadow-sm",
         "bg-noise",
       )}
       data-testid={`cover-${itemId}`}
     >
-      <div className={cn("absolute inset-0 bg-gradient-to-br", m.coverGradient || "from-slate-700 to-slate-900")} />
+      <div className={cn("absolute inset-0 bg-gradient-to-br grayscale contrast-125", m.coverGradient || "from-slate-700 to-slate-900")} />
       {m.coverUrl && (
         <img
           src={m.coverUrl}
@@ -154,21 +149,21 @@ function TopNav({
     <div className="sticky top-0 z-40 border-b bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
         <Link href="/" data-testid="link-home" className="group flex items-center gap-2">
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-primary/18 via-primary/8 to-accent/14 ring-1 ring-border ring-soft">
-            <span className="font-serif text-lg font-semibold text-gradient">T</span>
+          <div className="grid h-9 w-9 place-items-center rounded-md bg-foreground ring-1 ring-border">
+            <span className="font-brand text-lg font-semibold text-primary">T</span>
           </div>
           <div className="hidden sm:block">
-            <div className="font-serif text-[15px] font-semibold leading-tight">Tastelog</div>
+            <div className="font-brand text-[15px] font-semibold leading-tight">Tastelog</div>
             <div className="text-xs text-muted-foreground">Your taste, across mediums</div>
           </div>
         </Link>
 
-        <div className="ml-auto hidden w-[420px] max-w-full items-center gap-2 rounded-2xl border bg-card/60 px-3 py-2 shadow-sm backdrop-blur sm:flex">
+        <div className="ml-auto hidden w-[420px] max-w-full items-center gap-2 rounded-md border bg-card/60 px-3 py-2 shadow-sm backdrop-blur sm:flex">
           <Search className="h-4 w-4 text-muted-foreground" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search films, anime, books, TV, music…"
+            placeholder="Search films, anime, books, TV, music, games…"
             className="h-7 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
             data-testid="input-search"
           />
@@ -180,8 +175,9 @@ function TopNav({
         <div className="flex items-center gap-2">
           <ThemeToggle />
 
-          <Button size="sm" className="rounded-xl" data-testid="button-log" asChild>
+          <Button size="sm" className="rounded-md" data-testid="button-log" asChild>
             <Link href="/review/new" data-testid="link-new-review">
+              <Plus className="size-4" />
               Log
             </Link>
           </Button>
@@ -191,7 +187,7 @@ function TopNav({
               <Button
                 variant="secondary"
                 size="icon"
-                className="rounded-xl sm:hidden"
+                className="rounded-md sm:hidden"
                 data-testid="button-open-search"
               >
                 <Search className="h-4 w-4" />
@@ -205,13 +201,13 @@ function TopNav({
                 </SheetDescription>
               </SheetHeader>
               <div className="px-4 pb-4">
-                <div className="mt-3 flex items-center gap-2 rounded-2xl border bg-card px-3 py-2">
+                <div className="mt-3 flex items-center gap-2 rounded-md border bg-card px-3 py-2">
                   <Search className="h-4 w-4 text-muted-foreground" />
                   <Input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search films, anime, books, TV, music…"
-                    className="h-9 rounded-xl"
+                    placeholder="Search films, anime, books, TV, music, games…"
+                    className="h-9 rounded-md"
                     data-testid="input-search-mobile"
                   />
                 </div>
@@ -219,14 +215,20 @@ function TopNav({
             </SheetContent>
           </Sheet>
 
-          <Link href={`/u/${currentUser?.username ?? "alice"}`} data-testid="link-profile" className="grid place-items-center">
-            <Avatar className="h-9 w-9 ring-1 ring-border" data-testid="avatar-you">
-              <AvatarImage alt={currentUser?.displayName ?? "You"} src={currentUser?.avatarUrl ?? ""} />
-              <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
-                {(currentUser?.displayName ?? "A").slice(0, 1)}
-              </AvatarFallback>
-            </Avatar>
-          </Link>
+          {currentUser ? (
+            <Link href={`/u/${currentUser.username}`} data-testid="link-profile" className="grid place-items-center">
+              <Avatar className="h-9 w-9 ring-1 ring-border" data-testid="avatar-you">
+                <AvatarImage alt={currentUser.displayName} src={currentUser.avatarUrl ?? ""} />
+                  <AvatarFallback className="bg-primary/15">
+                  {currentUser.displayName.slice(0, 1)}
+                </AvatarFallback>
+              </Avatar>
+            </Link>
+          ) : (
+            <Button size="sm" variant="secondary" className="rounded-md" asChild>
+              <Link href="/signin" data-testid="link-signin">Sign in</Link>
+            </Button>
+          )}
         </div>
       </div>
     </div>
@@ -258,36 +260,75 @@ function useDebounce(value: string, delay: number) {
   return debounced;
 }
 
+function SocialProofStrip({
+  reviewCount,
+  discoverCount,
+  reviewerCount,
+}: {
+  reviewCount: number;
+  discoverCount: number;
+  reviewerCount: number;
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-2 sm:gap-3" data-testid="social-proof-strip">
+      <div className="rounded-md border bg-card/60 p-3">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Heart className="h-3.5 w-3.5 text-primary" />
+          Community reviews
+        </div>
+        <div className="mt-1 font-serif text-lg font-semibold">{reviewCount}</div>
+      </div>
+      <div className="rounded-md border bg-card/60 p-3">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <TrendingUp className="h-3.5 w-3.5 text-primary" />
+          Trending now
+        </div>
+        <div className="mt-1 font-serif text-lg font-semibold">{discoverCount}</div>
+      </div>
+      <div className="rounded-md border bg-card/60 p-3">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Star className="h-3.5 w-3.5 text-primary" />
+          Top reviewers
+        </div>
+        <div className="mt-1 font-serif text-lg font-semibold">{reviewerCount}</div>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<MediaType | "all">("all");
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
   const debouncedQuery = useDebounce(query, 300);
-
-  const { data: currentUser } = useQuery<any>({
-    queryKey: ["/api/users/username/alice"],
-  });
+  const { currentUser } = useAuth();
 
   const trendingType = activeTab === "all" ? "all" : activeTab;
   const { data: trendingData = [], isLoading: trendingLoading } = useQuery<any[]>({
     queryKey: ["/api/trending", trendingType],
-    queryFn: () =>
-      fetch(`/api/trending/${trendingType}?limit=12`).then((r) => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`/api/trending/${trendingType}?limit=12`);
+      const data = await r.json();
+      return r.ok && Array.isArray(data) ? data : [];
+    },
   });
 
   const isSearching = debouncedQuery.trim().length > 0;
   const { data: searchResults = [], isLoading: searchLoading } = useQuery<any[]>({
     queryKey: ["/api/search/all", debouncedQuery, activeTab],
-    queryFn: () => {
+    queryFn: async () => {
       const params = new URLSearchParams({ q: debouncedQuery.trim() });
       if (activeTab !== "all") params.set("type", activeTab);
-      return fetch(`/api/search/all?${params}`).then((r) => r.json());
+      const r = await fetch(`/api/search/all?${params}`);
+      const data = await r.json();
+      return r.ok && Array.isArray(data) ? data : [];
     },
     enabled: isSearching,
   });
 
-  const media = isSearching ? searchResults : trendingData;
+  const rawMedia = isSearching ? searchResults : trendingData;
+  const media = Array.isArray(rawMedia) ? rawMedia : [];
   const mediaLoading = isSearching ? searchLoading : trendingLoading;
 
   const { data: popularReviews = [], isLoading: reviewsLoading } = useQuery<any[]>({
@@ -313,13 +354,9 @@ export default function Home() {
   const likeMutation = useMutation({
     mutationFn: async ({ reviewId, liked }: { reviewId: string; liked: boolean }) => {
       if (liked) {
-        await apiRequest("DELETE", `/api/reviews/${reviewId}/like`, {
-          userId: currentUser?.id,
-        });
+        await apiRequest("DELETE", `/api/reviews/${reviewId}/like`);
       } else {
-        await apiRequest("POST", `/api/reviews/${reviewId}/like`, {
-          userId: currentUser?.id,
-        });
+        await apiRequest("POST", `/api/reviews/${reviewId}/like`);
       }
     },
     onSuccess: () => {
@@ -334,7 +371,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30">
+    <div className="min-h-dvh bg-background">
       <TopNav query={query} setQuery={setQuery} currentUser={currentUser} />
 
       <main className="mx-auto max-w-6xl px-4 pb-24 pt-6">
@@ -345,7 +382,7 @@ export default function Home() {
           className="grid gap-6 lg:grid-cols-[1.25fr_.75fr]"
         >
           <section>
-            <div className="glass bg-noise rounded-3xl p-5 sm:p-7">
+            <div className="glass bg-noise rounded-lg p-5 sm:p-7">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <div
@@ -353,14 +390,14 @@ export default function Home() {
                     data-testid="badge-slogan"
                   >
                     <Star className="h-3.5 w-3.5 fill-primary text-primary" />
-                    taste across films, anime, books, TV & music
+                    taste across films, anime, books, TV, music & games
                   </div>
                   <h1
                     className="mt-3 font-serif text-3xl font-semibold tracking-tight sm:text-4xl"
                     data-testid="text-home-title"
                   >
                     Log what you love.
-                    <span className="block text-gradient">Find people with your taste.</span>
+                    <span className="block text-primary">Find people with your taste.</span>
                   </h1>
                   <p
                     className="mt-2 max-w-prose text-sm leading-relaxed text-muted-foreground"
@@ -374,7 +411,7 @@ export default function Home() {
                 <div className="flex items-center gap-2">
                   <Button
                     variant="secondary"
-                    className="rounded-xl"
+                    className="rounded-md"
                     data-testid="button-explore"
                     asChild
                   >
@@ -382,7 +419,7 @@ export default function Home() {
                       Explore
                     </Link>
                   </Button>
-                  <Button className="rounded-xl" data-testid="button-start-review" asChild>
+                  <Button className="rounded-md" data-testid="button-start-review" asChild>
                     <Link href="/review/new" data-testid="link-start-review">
                       Start a review
                     </Link>
@@ -391,60 +428,39 @@ export default function Home() {
               </div>
 
               <Separator className="my-5" />
+              <SocialProofStrip
+                reviewCount={popularReviews.length}
+                discoverCount={media.length}
+                reviewerCount={topReviewers.length}
+              />
 
-              <div className="mb-5">
-                <h2 className="mb-3 text-sm font-semibold" data-testid="text-categories-title">
-                  Browse by category
-                </h2>
-                <div className="grid grid-cols-5 gap-2">
-                  {categories.map((cat) => {
-                    const CatIcon = cat.icon;
-                    const isActive = activeTab === cat.type;
-                    return (
-                      <button
-                        key={cat.type}
-                        onClick={() => setActiveTab(isActive ? "all" : cat.type)}
-                        className={cn(
-                          "group relative overflow-hidden rounded-2xl border p-3 text-left transition-all",
-                          isActive
-                            ? "ring-2 ring-primary border-primary/50"
-                            : "hover:border-primary/30",
-                        )}
-                        data-testid={`category-${cat.type}`}
-                      >
-                        <div className={cn("absolute inset-0 bg-gradient-to-br opacity-20", cat.gradient)} />
-                        <CatIcon className={cn("relative h-5 w-5 mb-1.5", isActive ? "text-primary" : "text-foreground/70")} strokeWidth={2} />
-                        <div className={cn("relative text-xs font-medium", isActive ? "text-primary" : "text-foreground/80")}>{cat.label}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <Tabs
                   value={activeTab}
                   onValueChange={(v) => setActiveTab(v as any)}
                   className="w-full"
                 >
-                  <TabsList className="grid w-full grid-cols-6 rounded-2xl bg-muted/50 p-1">
-                    <TabsTrigger value="all" className="rounded-xl" data-testid="tab-all">
+                  <TabsList className="grid w-full grid-cols-7 rounded-md bg-muted/50 p-1">
+                    <TabsTrigger value="all" className="rounded-md" data-testid="tab-all">
                       All
                     </TabsTrigger>
-                    <TabsTrigger value="movie" className="rounded-xl" data-testid="tab-movie">
+                    <TabsTrigger value="movie" className="rounded-md" data-testid="tab-movie">
                       Movies
                     </TabsTrigger>
-                    <TabsTrigger value="anime" className="rounded-xl" data-testid="tab-anime">
+                    <TabsTrigger value="anime" className="rounded-md" data-testid="tab-anime">
                       Anime
                     </TabsTrigger>
-                    <TabsTrigger value="book" className="rounded-xl" data-testid="tab-book">
+                    <TabsTrigger value="book" className="rounded-md" data-testid="tab-book">
                       Books
                     </TabsTrigger>
-                    <TabsTrigger value="tv" className="rounded-xl" data-testid="tab-tv">
+                    <TabsTrigger value="tv" className="rounded-md" data-testid="tab-tv">
                       TV
                     </TabsTrigger>
-                    <TabsTrigger value="music" className="rounded-xl" data-testid="tab-music">
+                    <TabsTrigger value="music" className="rounded-md" data-testid="tab-music">
                       Music
+                    </TabsTrigger>
+                    <TabsTrigger value="game" className="rounded-md" data-testid="tab-game">
+                      Games
                     </TabsTrigger>
                   </TabsList>
                 </Tabs>
@@ -468,7 +484,7 @@ export default function Home() {
                   Array.from({ length: 6 }).map((_, i) => (
                     <div
                       key={i}
-                      className="aspect-[3/4] animate-pulse rounded-xl bg-muted/50"
+                      className="aspect-[3/4] animate-pulse rounded-md bg-muted/50"
                     />
                   ))
                 ) : (
@@ -479,7 +495,7 @@ export default function Home() {
                         <motion.div
                           whileHover={{ y: -4 }}
                           transition={{ duration: 0.2 }}
-                          className="rounded-2xl"
+                          className="rounded-md"
                         >
                           <Cover m={m} />
                           <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -524,7 +540,7 @@ export default function Home() {
                   Array.from({ length: 3 }).map((_, i) => (
                     <div
                       key={i}
-                      className="h-32 animate-pulse rounded-3xl bg-muted/50"
+                      className="h-32 animate-pulse rounded-lg bg-muted/50"
                     />
                   ))
                 ) : (
@@ -532,16 +548,16 @@ export default function Home() {
                     const isLiked = likedMap[r.id] ?? false;
                     const likeCount = r.likeCount + (isLiked ? 1 : 0);
                     return (
-                      <Card
+                      <div
                         key={r.id}
-                        className="glass bg-noise rounded-3xl p-4 sm:p-5"
+                        className="rounded-lg border border-border bg-card p-4 sm:p-5"
                         data-testid={`card-review-${r.id}`}
                       >
                         <div className="flex items-start gap-3">
                           <Link href={`/u/${r.user.username}`} data-testid={`link-author-${r.id}`}>
                             <Avatar className="h-10 w-10 ring-1 ring-border" data-testid={`avatar-author-${r.id}`}>
                               <AvatarImage alt={r.user.displayName} src={r.user.avatarUrl ?? ""} />
-                              <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
+                              <AvatarFallback className="bg-primary/15">
                                 {r.user.displayName.slice(0, 1)}
                               </AvatarFallback>
                             </Avatar>
@@ -588,7 +604,7 @@ export default function Home() {
                                 variant={isLiked ? "default" : "secondary"}
                                 size="sm"
                                 className={cn(
-                                  "rounded-xl",
+                                  "rounded-md",
                                   isLiked && "bg-primary/20 text-foreground border border-border",
                                 )}
                                 onClick={() => toggleLike(r.id)}
@@ -615,7 +631,7 @@ export default function Home() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="rounded-xl"
+                                className="rounded-md"
                                 data-testid={`button-open-${r.id}`}
                                 asChild
                               >
@@ -626,7 +642,7 @@ export default function Home() {
                             </div>
                           </div>
                         </div>
-                      </Card>
+                      </div>
                     );
                   })
                 )}
@@ -635,11 +651,11 @@ export default function Home() {
           </section>
 
           <aside className="space-y-4">
-            <Card className="glass bg-noise rounded-3xl p-5" data-testid="card-profile-preview">
+            <Card className="rounded-lg border border-border bg-card p-5" data-testid="card-profile-preview">
               <div className="flex items-center gap-3">
                 <Avatar className="h-11 w-11 ring-1 ring-border" data-testid="avatar-profile-preview">
                   <AvatarImage alt={currentUser?.displayName ?? "You"} src={currentUser?.avatarUrl ?? ""} />
-                  <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
+                  <AvatarFallback className="bg-primary/15">
                     {(currentUser?.displayName ?? "A").slice(0, 1)}
                   </AvatarFallback>
                 </Avatar>
@@ -655,11 +671,11 @@ export default function Home() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    className="rounded-xl"
+                    className="rounded-md"
                     data-testid="button-view-profile"
                     asChild
                   >
-                    <Link href={`/u/${currentUser?.username ?? "alice"}`} data-testid="link-go-profile">
+                    <Link href={currentUser ? `/u/${currentUser.username}` : "/signin"} data-testid="link-go-profile">
                       View
                     </Link>
                   </Button>
@@ -669,15 +685,15 @@ export default function Home() {
               <Separator className="my-4" />
 
               <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-2xl border bg-card/60 p-3" data-testid="stat-reviews">
+                <div className="rounded-md border bg-card/60 p-3" data-testid="stat-reviews">
                   <div className="text-xs text-muted-foreground">Reviews</div>
                   <div className="mt-1 font-serif text-lg font-semibold">{currentUser?.reviews ?? 0}</div>
                 </div>
-                <div className="rounded-2xl border bg-card/60 p-3" data-testid="stat-followers">
+                <div className="rounded-md border bg-card/60 p-3" data-testid="stat-followers">
                   <div className="text-xs text-muted-foreground">Followers</div>
                   <div className="mt-1 font-serif text-lg font-semibold">{currentUser?.followers ?? 0}</div>
                 </div>
-                <div className="rounded-2xl border bg-card/60 p-3" data-testid="stat-following">
+                <div className="rounded-md border bg-card/60 p-3" data-testid="stat-following">
                   <div className="text-xs text-muted-foreground">Following</div>
                   <div className="mt-1 font-serif text-lg font-semibold">{currentUser?.following ?? 0}</div>
                 </div>
@@ -689,7 +705,7 @@ export default function Home() {
                     Your favorites
                   </div>
                   <Link
-                    href={`/u/${currentUser?.username ?? "alice"}`}
+                    href={currentUser ? `/u/${currentUser.username}` : "/signin"}
                     data-testid="link-edit-faves"
                     className="text-xs font-medium text-primary hover:opacity-80"
                   >
@@ -700,8 +716,8 @@ export default function Home() {
                 <div className="mt-3 grid grid-cols-4 gap-2">
                   {favoritesData.slice(0, 4).map((m: any) => (
                     <Link key={m.id} href={`/m/${m.id}`} data-testid={`link-fave-${m.id}`}>
-                      <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-                        <div className={cn("relative aspect-[3/4] bg-gradient-to-br", m.coverGradient)}>
+                      <div className="overflow-hidden rounded-md border bg-card shadow-sm">
+                        <div className={cn("relative aspect-[3/4] bg-gradient-to-br grayscale contrast-125", m.coverGradient)}>
                           {m.coverUrl && (
                             <img src={m.coverUrl} alt={m.title} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
                           )}
@@ -713,7 +729,7 @@ export default function Home() {
               </div>
             </Card>
 
-            <Card className="glass bg-noise rounded-3xl p-5" data-testid="card-top-reviewers">
+            <Card className="rounded-lg border border-border bg-card p-5" data-testid="card-top-reviewers">
               <div className="flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-primary" />
                 <div className="font-serif text-lg font-semibold" data-testid="text-top-reviewers-title">
@@ -727,7 +743,7 @@ export default function Home() {
               <div className="space-y-3">
                 {topReviewers.map((reviewer: any, idx: number) => (
                   <Link key={reviewer.id} href={`/u/${reviewer.username}`} data-testid={`link-reviewer-${reviewer.id}`}>
-                    <div className="flex items-center gap-3 rounded-2xl border bg-card/60 p-3 hover:bg-card/80 transition">
+                    <div className="flex items-center gap-3 rounded-md border bg-card/60 p-3 hover:bg-card/80 transition">
                       <div className={cn(
                         "flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold",
                         idx === 0 ? "bg-amber-500/20 text-amber-500" :
@@ -739,7 +755,7 @@ export default function Home() {
                       </div>
                       <Avatar className="h-8 w-8 ring-1 ring-border" data-testid={`avatar-reviewer-${reviewer.id}`}>
                         <AvatarImage alt={reviewer.displayName} src={reviewer.avatarUrl ?? ""} />
-                        <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20 text-xs">
+                        <AvatarFallback className="bg-primary/15 text-xs">
                           {reviewer.displayName?.slice(0, 1) ?? "?"}
                         </AvatarFallback>
                       </Avatar>
@@ -760,7 +776,7 @@ export default function Home() {
               </div>
             </Card>
 
-            <Card className="glass bg-noise rounded-3xl p-5" data-testid="card-watchlist-preview">
+            <Card className="rounded-lg border border-border bg-card p-5" data-testid="card-watchlist-preview">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="font-serif text-lg font-semibold" data-testid="text-watchlist-title">
@@ -785,9 +801,9 @@ export default function Home() {
                 <div className="space-y-2">
                   {watchlistData.slice(0, 5).map((m: any) => (
                     <Link key={m.id} href={`/m/${m.id}`} data-testid={`row-watchlist-${m.id}`}>
-                      <div className="flex items-center gap-3 rounded-2xl border bg-card/60 p-3 hover:bg-card/80 transition">
-                        <div className="relative h-10 w-10 overflow-hidden rounded-xl border bg-card shadow-sm">
-                          <div className={cn("h-full w-full bg-gradient-to-br", m.coverGradient)} />
+                      <div className="flex items-center gap-3 rounded-md border bg-card/60 p-3 hover:bg-card/80 transition">
+                        <div className="relative h-10 w-10 overflow-hidden rounded-md border bg-card shadow-sm">
+                          <div className={cn("h-full w-full bg-gradient-to-br grayscale contrast-125", m.coverGradient)} />
                           {m.coverUrl && (
                             <img src={m.coverUrl} alt={m.title} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
                           )}
@@ -813,7 +829,7 @@ export default function Home() {
         </motion.div>
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
+      <div className="font-brand fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link href="/" data-testid="nav-home" className="text-sm font-medium hover:opacity-80">
             Home
@@ -833,7 +849,7 @@ export default function Home() {
             Watchlist
           </Link>
           <Link
-            href={`/u/${currentUser?.username ?? "alice"}`}
+            href={currentUser ? `/u/${currentUser.username}` : "/signin"}
             data-testid="nav-profile"
             className="text-sm font-medium text-muted-foreground hover:text-foreground"
           >

@@ -1,6 +1,7 @@
-import type { Express } from "express";
-import { type Server } from "http";
+import type { Express, Request, Response, NextFunction } from "express";
+import type { Server } from "node:http";
 import { storage } from "./storage";
+import { authMiddleware } from "./auth";
 import { insertReviewSchema } from "@shared/schema";
 import { searchSpotifyAlbums, getSpotifyAlbum } from "./spotify";
 import { searchOpenLibraryBooks, getOpenLibraryBook, getTrendingBooks } from "./openlibrary";
@@ -8,11 +9,32 @@ import {
   getTrendingMovies, getTrendingTv, getTrendingAnime,
   searchTmdbMovies, searchTmdbTv, searchTmdbAnime,
 } from "./tmdb";
+import { searchRawgGames, getTrendingGames } from "./rawg";
+
+type RequestWithAuth = Request & { authUserId?: string; authPayload?: { name?: string; email?: string } };
+
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const uid = (req as RequestWithAuth).authUserId;
+  if (!uid) return res.status(401).json({ message: "Unauthorized" });
+  next();
+}
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express,
 ): Promise<Server> {
+  app.use("/api", authMiddleware(false));
+
+  app.get("/api/auth/me", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {
+      name: authReq.authPayload?.name,
+      email: authReq.authPayload?.email,
+    });
+    const stats = await storage.getProfileStats(appUser.id);
+    res.json({ ...appUser, ...stats });
+  });
+
   app.get("/api/trending/:type", async (req, res) => {
     const type = req.params.type;
     const limit = parseInt(req.query.limit as string) || 10;
@@ -34,19 +56,23 @@ export async function registerRoutes(
         case "music":
           results = await searchSpotifyAlbums("top hits 2024", limit);
           break;
+        case "game":
+          results = await getTrendingGames(limit);
+          break;
         case "all": {
-          const [movies, tv, anime, books, music] = await Promise.all([
+          const [movies, tv, anime, books, music, games] = await Promise.all([
             getTrendingMovies(4),
             getTrendingTv(4),
             getTrendingAnime(4),
             getTrendingBooks(4),
             searchSpotifyAlbums("top hits 2024", 4).catch(() => []),
+            getTrendingGames(4).catch(() => []),
           ]);
-          results = [...movies, ...tv, ...anime, ...books, ...music];
+          results = [...movies, ...tv, ...anime, ...books, ...music, ...games];
           break;
         }
         default:
-          return res.status(400).json({ message: "Invalid type. Use movie, tv, anime, book, music, or all" });
+          return res.status(400).json({ message: "Invalid type. Use movie, tv, anime, book, music, game, or all" });
       }
       res.json(results);
     } catch (err: any) {
@@ -80,18 +106,22 @@ export async function registerRoutes(
           case "music":
             results = await searchSpotifyAlbums(q, limit);
             break;
+          case "game":
+            results = await searchRawgGames(q, limit);
+            break;
         }
         return res.json(results);
       }
 
-      const [movies, tv, anime, books, music] = await Promise.all([
+      const [movies, tv, anime, books, music, games] = await Promise.all([
         searchTmdbMovies(q, 4).catch(() => []),
         searchTmdbTv(q, 4).catch(() => []),
         searchTmdbAnime(q, 4).catch(() => []),
         searchOpenLibraryBooks(q, 4).catch(() => []),
         searchSpotifyAlbums(q, 4).catch(() => []),
+        searchRawgGames(q, 4).catch(() => []),
       ]);
-      res.json([...movies, ...tv, ...anime, ...books, ...music]);
+      res.json([...movies, ...tv, ...anime, ...books, ...music, ...games]);
     } catch (err: any) {
       console.error("Unified search error:", err.message);
       res.status(500).json({ message: "Search failed" });
@@ -161,8 +191,12 @@ export async function registerRoutes(
     res.json(result);
   });
 
-  app.post("/api/reviews", async (req, res) => {
-    const parsed = insertReviewSchema.safeParse(req.body);
+  app.post("/api/reviews", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const parsed = insertReviewSchema.safeParse({
+      ...req.body,
+      userId: authReq.authUserId,
+    });
     if (!parsed.success) {
       return res.status(400).json({ message: parsed.error.message });
     }
@@ -175,13 +209,21 @@ export async function registerRoutes(
     res.json(result);
   });
 
-  app.post("/api/users/:userId/watchlist/:mediaId", async (req, res) => {
-    await storage.addToWatchlist(req.params.userId, req.params.mediaId);
+  app.post("/api/users/:userId/watchlist/:mediaId", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    if (req.params.userId !== authReq.authUserId) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    await storage.addToWatchlist(String(req.params.userId), String(req.params.mediaId));
     res.json({ ok: true });
   });
 
-  app.delete("/api/users/:userId/watchlist/:mediaId", async (req, res) => {
-    await storage.removeFromWatchlist(req.params.userId, req.params.mediaId);
+  app.delete("/api/users/:userId/watchlist/:mediaId", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    if (req.params.userId !== authReq.authUserId) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    await storage.removeFromWatchlist(String(req.params.userId), String(req.params.mediaId));
     res.json({ ok: true });
   });
 
@@ -201,12 +243,16 @@ export async function registerRoutes(
     res.json(result);
   });
 
-  app.put("/api/users/:id/favorites", async (req, res) => {
+  app.put("/api/users/:id/favorites", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    if (req.params.id !== authReq.authUserId) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
     const { mediaIds } = req.body;
     if (!Array.isArray(mediaIds)) {
       return res.status(400).json({ message: "mediaIds must be an array" });
     }
-    await storage.setFavorites(req.params.id, mediaIds);
+    await storage.setFavorites(String(req.params.id), mediaIds);
     res.json({ ok: true });
   });
 
@@ -223,31 +269,39 @@ export async function registerRoutes(
 
   app.post(
     "/api/users/:followerId/follow/:followingId",
+    requireAuth,
     async (req, res) => {
-      await storage.follow(req.params.followerId, req.params.followingId);
+      const authReq = req as RequestWithAuth;
+      if (req.params.followerId !== authReq.authUserId) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      await storage.follow(String(req.params.followerId), String(req.params.followingId));
       res.json({ ok: true });
     },
   );
 
   app.delete(
     "/api/users/:followerId/follow/:followingId",
+    requireAuth,
     async (req, res) => {
-      await storage.unfollow(req.params.followerId, req.params.followingId);
+      const authReq = req as RequestWithAuth;
+      if (req.params.followerId !== authReq.authUserId) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      await storage.unfollow(String(req.params.followerId), String(req.params.followingId));
       res.json({ ok: true });
     },
   );
 
-  app.post("/api/reviews/:reviewId/like", async (req, res) => {
-    const { userId } = req.body;
-    if (!userId) return res.status(400).json({ message: "userId required" });
-    await storage.likeReview(userId, req.params.reviewId);
+  app.post("/api/reviews/:reviewId/like", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    await storage.likeReview(authReq.authUserId!, String(req.params.reviewId));
     res.json({ ok: true });
   });
 
-  app.delete("/api/reviews/:reviewId/like", async (req, res) => {
-    const { userId } = req.body;
-    if (!userId) return res.status(400).json({ message: "userId required" });
-    await storage.unlikeReview(userId, req.params.reviewId);
+  app.delete("/api/reviews/:reviewId/like", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    await storage.unlikeReview(authReq.authUserId!, String(req.params.reviewId));
     res.json({ ok: true });
   });
 

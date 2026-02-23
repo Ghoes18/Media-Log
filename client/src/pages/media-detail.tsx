@@ -3,12 +3,14 @@ import { Link, useParams } from "wouter";
 import { motion } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth-context";
 import {
   ArrowLeft,
   Bookmark,
   BookOpen,
   Clapperboard,
   Film,
+  Gamepad2,
   Heart,
   Music,
   Share2,
@@ -25,7 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
-type MediaType = "movie" | "anime" | "book" | "tv" | "music";
+type MediaType = "movie" | "anime" | "book" | "tv" | "music" | "game";
 
 function iconFor(type: MediaType) {
   switch (type) {
@@ -39,6 +41,8 @@ function iconFor(type: MediaType) {
       return Tv2;
     case "music":
       return Music;
+    case "game":
+      return Gamepad2;
   }
 }
 
@@ -104,10 +108,7 @@ export default function MediaDetail() {
 
   const [draft, setDraft] = useState("");
   const [draftRating, setDraftRating] = useState(0);
-
-  const { data: currentUser } = useQuery<any>({
-    queryKey: ["/api/users/username/alice"],
-  });
+  const { currentUser } = useAuth();
 
   const { data: media, isLoading: mediaLoading } = useQuery<any>({
     queryKey: ["/api/media", id],
@@ -128,6 +129,7 @@ export default function MediaDetail() {
 
   const toggleWatchlist = useMutation({
     mutationFn: async () => {
+      if (!currentUser) return;
       if (saved) {
         await apiRequest("DELETE", `/api/users/${currentUser.id}/watchlist/${id}`);
       } else {
@@ -135,14 +137,13 @@ export default function MediaDetail() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/users/${currentUser.id}/watchlist/check/${id}`] });
+      if (currentUser) queryClient.invalidateQueries({ queryKey: [`/api/users/${currentUser.id}/watchlist/check/${id}`] });
     },
   });
 
   const postReview = useMutation({
     mutationFn: async () => {
       await apiRequest("POST", "/api/reviews", {
-        userId: currentUser.id,
         mediaId: id,
         rating: draftRating,
         body: draft,
@@ -157,7 +158,7 @@ export default function MediaDetail() {
 
   const likeReview = useMutation({
     mutationFn: async (reviewId: string) => {
-      await apiRequest("POST", `/api/reviews/${reviewId}/like`, { userId: currentUser.id });
+      await apiRequest("POST", `/api/reviews/${reviewId}/like`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/media/${id}/reviews`] });
@@ -166,7 +167,7 @@ export default function MediaDetail() {
 
   const unlikeReview = useMutation({
     mutationFn: async (reviewId: string) => {
-      await apiRequest("DELETE", `/api/reviews/${reviewId}/like`, { userId: currentUser.id });
+      await apiRequest("DELETE", `/api/reviews/${reviewId}/like`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/media/${id}/reviews`] });
@@ -175,7 +176,7 @@ export default function MediaDetail() {
 
   if (mediaLoading || !media) {
     return (
-      <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30 flex items-center justify-center">
+      <div className="min-h-dvh bg-background flex items-center justify-center">
         <div className="text-muted-foreground" data-testid="loading-media">Loading…</div>
       </div>
     );
@@ -187,13 +188,13 @@ export default function MediaDetail() {
   const newReviews = [...reviews];
 
   return (
-    <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30">
+    <div className="min-h-dvh bg-background">
       <header className="sticky top-0 z-30 border-b bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
           <Button
             variant="secondary"
             size="icon"
-            className="rounded-xl"
+            className="rounded-md"
             data-testid="button-back"
             asChild
           >
@@ -215,7 +216,7 @@ export default function MediaDetail() {
           <div className="ml-auto flex items-center gap-2">
             <Button
               variant={saved ? "default" : "secondary"}
-              className="rounded-xl"
+              className="rounded-md"
               data-testid="button-save"
               onClick={() => toggleWatchlist.mutate()}
               disabled={!currentUser}
@@ -223,7 +224,7 @@ export default function MediaDetail() {
               <Bookmark className="mr-2 h-4 w-4" />
               {saved ? "Saved" : "Watchlist"}
             </Button>
-            <Button variant="secondary" className="rounded-xl" data-testid="button-share">
+            <Button variant="secondary" className="rounded-md" data-testid="button-share">
               <Share2 className="mr-2 h-4 w-4" />
               Share
             </Button>
@@ -239,13 +240,13 @@ export default function MediaDetail() {
           className="grid gap-6 lg:grid-cols-[.9fr_1.1fr]"
         >
           <section>
-            <Card className="glass bg-noise rounded-3xl p-5 sm:p-7" data-testid="card-media-hero">
+            <Card className="glass bg-noise rounded-lg p-5 sm:p-7" data-testid="card-media-hero">
               <div className="flex items-start gap-4">
                 <div
-                  className="relative h-40 w-28 overflow-hidden rounded-3xl border bg-card shadow-sm"
+                  className="relative h-40 w-28 overflow-hidden rounded-lg border bg-card shadow-sm"
                   data-testid="img-media-cover"
                 >
-                  <div className={cn("absolute inset-0 bg-gradient-to-br", media.coverGradient)} />
+                  <div className={cn("absolute inset-0 bg-gradient-to-br grayscale contrast-125", media.coverGradient)} />
                   {media.coverUrl && (
                     <img src={media.coverUrl} alt={media.title} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
                   )}
@@ -274,7 +275,7 @@ export default function MediaDetail() {
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border bg-card/60 px-3 py-2" data-testid="box-rating">
+                    <div className="rounded-md border bg-card/60 px-3 py-2" data-testid="box-rating">
                       <div className="text-xs text-muted-foreground">Avg rating</div>
                       <div className="mt-1 flex items-center gap-2">
                         <div className="font-serif text-lg font-semibold">
@@ -302,7 +303,7 @@ export default function MediaDetail() {
               </div>
             </Card>
 
-            <Card className="glass bg-noise mt-4 rounded-3xl p-5 sm:p-7" data-testid="card-write">
+            <Card className="rounded-lg border border-border bg-card mt-4 p-5 sm:p-7" data-testid="card-write">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="font-serif text-lg font-semibold" data-testid="text-write-title">
@@ -332,7 +333,7 @@ export default function MediaDetail() {
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder="What did it taste like?"
-                className="min-h-[110px] rounded-2xl"
+                className="min-h-[110px] rounded-md"
                 data-testid="input-quick-review"
               />
 
@@ -341,7 +342,7 @@ export default function MediaDetail() {
                   Tip: mention a scene / line / moment.
                 </div>
                 <Button
-                  className="rounded-xl"
+                  className="rounded-md"
                   data-testid="button-post-quick"
                   disabled={!draft.trim() || draftRating === 0 || !currentUser || postReview.isPending}
                   onClick={() => postReview.mutate()}
@@ -353,7 +354,7 @@ export default function MediaDetail() {
           </section>
 
           <section>
-            <Card className="glass bg-noise rounded-3xl p-5 sm:p-7" data-testid="card-reviews">
+            <Card className="rounded-lg border border-border bg-card p-5 sm:p-7" data-testid="card-reviews">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="font-serif text-lg font-semibold" data-testid="text-reviews-title">
@@ -368,11 +369,11 @@ export default function MediaDetail() {
               <Separator className="my-4" />
 
               <Tabs defaultValue="top">
-                <TabsList className="grid w-full grid-cols-2 rounded-2xl bg-muted/50 p-1">
-                  <TabsTrigger value="top" className="rounded-xl" data-testid="tab-top">
+                <TabsList className="grid w-full grid-cols-2 rounded-md bg-muted/50 p-1">
+                  <TabsTrigger value="top" className="rounded-md" data-testid="tab-top">
                     Top
                   </TabsTrigger>
-                  <TabsTrigger value="new" className="rounded-xl" data-testid="tab-new">
+                  <TabsTrigger value="new" className="rounded-md" data-testid="tab-new">
                     New
                   </TabsTrigger>
                 </TabsList>
@@ -381,7 +382,7 @@ export default function MediaDetail() {
                   {reviewsLoading ? (
                     <div className="text-center text-sm text-muted-foreground p-4" data-testid="loading-reviews">Loading reviews…</div>
                   ) : topReviews.length === 0 ? (
-                    <div className="rounded-3xl border bg-card/60 p-10 text-center" data-testid="empty-top">
+                    <div className="rounded-lg border bg-card/60 p-10 text-center" data-testid="empty-top">
                       <div className="font-serif text-xl font-semibold">No reviews yet.</div>
                       <p className="mt-2 text-sm text-muted-foreground">Be the first to share your thoughts.</p>
                     </div>
@@ -394,7 +395,7 @@ export default function MediaDetail() {
                   {reviewsLoading ? (
                     <div className="text-center text-sm text-muted-foreground p-4" data-testid="loading-reviews-new">Loading reviews…</div>
                   ) : newReviews.length === 0 ? (
-                    <div className="rounded-3xl border bg-card/60 p-10 text-center" data-testid="empty-new">
+                    <div className="rounded-lg border bg-card/60 p-10 text-center" data-testid="empty-new">
                       <div className="font-serif text-xl font-semibold">No reviews yet.</div>
                       <p className="mt-2 text-sm text-muted-foreground">Be the first to share your thoughts.</p>
                     </div>
@@ -408,7 +409,7 @@ export default function MediaDetail() {
         </motion.div>
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
+      <div className="font-brand fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link
             href="/"
@@ -458,12 +459,12 @@ function ReviewCard({ r, currentUser, onLike, onUnlike }: { r: any; currentUser:
   };
 
   return (
-    <Card key={r.id} className="rounded-3xl border bg-card/60 p-4" data-testid={`card-review-${r.id}`}>
+    <Card key={r.id} className="rounded-lg border bg-card/60 p-4" data-testid={`card-review-${r.id}`}>
       <div className="flex items-start gap-3">
         <Link href={`/u/${r.user.username}`} data-testid={`link-review-author-${r.id}`}>
           <Avatar className="h-10 w-10 ring-1 ring-border" data-testid={`avatar-review-${r.id}`}>
             <AvatarImage alt={r.user.displayName} src={r.user.avatarUrl || ""} />
-            <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
+            <AvatarFallback className="bg-primary/15">
               {r.user.displayName.slice(0, 1)}
             </AvatarFallback>
           </Avatar>
@@ -484,7 +485,7 @@ function ReviewCard({ r, currentUser, onLike, onUnlike }: { r: any; currentUser:
             <Button
               size="sm"
               variant={liked ? "default" : "secondary"}
-              className="rounded-xl"
+              className="rounded-md"
               data-testid={`button-like-review-${r.id}`}
               onClick={handleLikeToggle}
               disabled={!currentUser}

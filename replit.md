@@ -54,6 +54,11 @@ Full-stack application with PostgreSQL database, Express API, and React frontend
 - **Spotify/MusicBrainz**: Music search with MusicBrainz + Cover Art Archive fallback
 - **Caching**: 30-minute in-memory TTL cache for trending + search results to avoid API rate limits
 
+## Running locally
+- The app requires PostgreSQL. Set `DATABASE_URL` (e.g. `postgresql://user:pass@localhost:5432/medialog`) or run Postgres on `localhost:5432`.
+- If the server fails to start with "Cannot connect to PostgreSQL", start PostgreSQL or point `DATABASE_URL` at a running database (e.g. [Neon](https://neon.tech)).
+- **Auth**: Uses Neon Auth (Better Auth). Set `NEON_AUTH_BASE_URL` and `VITE_NEON_AUTH_URL` to your Neon Auth URL (from Neon Console → Project → Auth → Configuration). Add your app origin (e.g. `http://localhost:5000`) to trusted domains in the Neon Console so sign-in redirects work.
+
 ## User Preferences
 - Dark mode by default
 - Glass UI aesthetic with backdrop-filter blur

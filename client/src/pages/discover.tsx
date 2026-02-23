@@ -8,6 +8,7 @@ import {
   Clapperboard,
   Filter,
   Film,
+  Gamepad2,
   Music,
   Flame,
   Loader2,
@@ -24,7 +25,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-type MediaType = "movie" | "anime" | "book" | "tv" | "music";
+type MediaType = "movie" | "anime" | "book" | "tv" | "music" | "game";
 
 function mediaIcon(type: string) {
   switch (type) {
@@ -38,6 +39,8 @@ function mediaIcon(type: string) {
       return Tv2;
     case "music":
       return Music;
+    case "game":
+      return Gamepad2;
     default:
       return Film;
   }
@@ -57,10 +60,10 @@ function CoverMini({ m }: { m: any }) {
   const itemId = m.id || m.externalId || "unknown";
   return (
     <div
-      className="relative h-20 w-16 overflow-hidden rounded-2xl border bg-card shadow-sm"
+      className="relative h-20 w-16 overflow-hidden rounded-md border bg-card shadow-sm"
       data-testid={`img-cover-${itemId}`}
     >
-      <div className={cn("absolute inset-0 bg-gradient-to-br", m.coverGradient || "from-slate-700 to-slate-900")} />
+      <div className={cn("absolute inset-0 bg-gradient-to-br grayscale contrast-125", m.coverGradient || "from-slate-700 to-slate-900")} />
       {m.coverUrl && (
         <img src={m.coverUrl} alt={m.title} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
       )}
@@ -101,13 +104,13 @@ export default function Discover() {
   const isLoading = isSearching ? searchLoading : trendingLoading;
 
   return (
-    <div className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30">
+    <div className="min-h-dvh bg-background">
       <header className="sticky top-0 z-30 border-b bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
           <Button
             variant="secondary"
             size="icon"
-            className="rounded-xl"
+            className="rounded-md"
             data-testid="button-back"
             asChild
           >
@@ -126,7 +129,7 @@ export default function Discover() {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="secondary" className="rounded-xl" data-testid="button-filter">
+            <Button variant="secondary" className="rounded-md" data-testid="button-filter">
               <Filter className="mr-2 h-4 w-4" />
               Filters
             </Button>
@@ -144,7 +147,7 @@ export default function Discover() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
         >
-          <Card className="glass bg-noise rounded-3xl p-5 sm:p-7" data-testid="card-search">
+          <Card className="glass bg-noise rounded-lg p-5 sm:p-7" data-testid="card-search">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <div
@@ -158,7 +161,7 @@ export default function Discover() {
                   Find your next favorite.
                 </h2>
                 <p className="mt-1 text-sm text-muted-foreground" data-testid="text-search-subtitle">
-                  Search across films, anime, books, TV shows, and music.
+                  Search across films, anime, books, TV shows, music, and games.
                 </p>
               </div>
             </div>
@@ -166,36 +169,39 @@ export default function Discover() {
             <Separator className="my-5" />
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex w-full items-center gap-2 rounded-2xl border bg-card px-3 py-2">
+              <div className="flex w-full items-center gap-2 rounded-md border bg-card px-3 py-2">
                 <Search className="h-4 w-4 text-muted-foreground" />
                 <Input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search titles, creators, years…"
-                  className="h-9 rounded-xl"
+                  className="h-9 rounded-md"
                   data-testid="input-discover-search"
                 />
               </div>
 
               <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full sm:w-auto">
-                <TabsList className="grid w-full grid-cols-6 rounded-2xl bg-muted/50 p-1 sm:w-[500px]">
-                  <TabsTrigger value="all" className="rounded-xl" data-testid="tab-all">
+                <TabsList className="grid w-full grid-cols-7 rounded-md bg-muted/50 p-1 sm:w-[580px]">
+                  <TabsTrigger value="all" className="rounded-md" data-testid="tab-all">
                     All
                   </TabsTrigger>
-                  <TabsTrigger value="movie" className="rounded-xl" data-testid="tab-movie">
+                  <TabsTrigger value="movie" className="rounded-md" data-testid="tab-movie">
                     Movies
                   </TabsTrigger>
-                  <TabsTrigger value="anime" className="rounded-xl" data-testid="tab-anime">
+                  <TabsTrigger value="anime" className="rounded-md" data-testid="tab-anime">
                     Anime
                   </TabsTrigger>
-                  <TabsTrigger value="book" className="rounded-xl" data-testid="tab-book">
+                  <TabsTrigger value="book" className="rounded-md" data-testid="tab-book">
                     Books
                   </TabsTrigger>
-                  <TabsTrigger value="tv" className="rounded-xl" data-testid="tab-tv">
+                  <TabsTrigger value="tv" className="rounded-md" data-testid="tab-tv">
                     TV
                   </TabsTrigger>
-                  <TabsTrigger value="music" className="rounded-xl" data-testid="tab-music">
+                  <TabsTrigger value="music" className="rounded-md" data-testid="tab-music">
                     Music
+                  </TabsTrigger>
+                  <TabsTrigger value="game" className="rounded-md" data-testid="tab-game">
+                    Games
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -223,7 +229,7 @@ export default function Discover() {
                   const itemId = m.id || m.externalId || `item-${idx}`;
                   return (
                     <div key={itemId} data-testid={`link-result-${itemId}`} className="block">
-                      <Card className="glass bg-noise rounded-3xl p-4 sm:p-5 hover:opacity-[0.98] transition">
+                      <Card className="rounded-lg border border-border bg-card p-4 sm:p-5 hover:opacity-[0.98] transition">
                         <div className="flex items-center gap-4">
                           <CoverMini m={m} />
                           <div className="min-w-0 flex-1">
@@ -265,7 +271,7 @@ export default function Discover() {
         </motion.div>
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
+      <div className="font-brand fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link
             href="/"
