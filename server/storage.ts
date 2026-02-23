@@ -8,18 +8,27 @@ import {
   favorites,
   follows,
   reviewLikes,
+  mediaLikes,
+  watched,
+  profileSettings,
+  badges,
+  userBadges,
+  subscriptions,
   type User,
   type InsertUser,
   type Media,
   type InsertMedia,
   type Review,
   type InsertReview,
+  type ProfileSettings,
+  type Badge,
 } from "@shared/schema";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, data: Partial<Pick<User, "displayName" | "bio">>): Promise<User>;
 
   getAllMedia(): Promise<Media[]>;
   getMediaById(id: string): Promise<Media | undefined>;
@@ -69,6 +78,26 @@ export interface IStorage {
 
   getTopReviewers(limit?: number): Promise<(User & { reviewCount: number })[]>;
   getPopularReviews(limit?: number): Promise<(Review & { user: User; media: Media; likeCount: number })[]>;
+
+  getMediaByExternalId(externalId: string, type: string): Promise<Media | undefined>;
+  ensureMedia(data: InsertMedia): Promise<Media>;
+
+  addWatched(userId: string, mediaId: string): Promise<void>;
+  removeWatched(userId: string, mediaId: string): Promise<void>;
+  isWatched(userId: string, mediaId: string): Promise<boolean>;
+
+  likeMedia(userId: string, mediaId: string): Promise<void>;
+  unlikeMedia(userId: string, mediaId: string): Promise<void>;
+  hasLikedMedia(userId: string, mediaId: string): Promise<boolean>;
+
+  getMediaStats(mediaId: string): Promise<{ watched: number; likes: number; listed: number }>;
+
+  getProfileSettings(userId: string): Promise<ProfileSettings | undefined>;
+  updateProfileSettings(userId: string, data: Partial<ProfileSettings>): Promise<ProfileSettings>;
+  getUserSubscription(userId: string): Promise<{ status: "free" | "pro" }>;
+  getBadges(): Promise<Badge[]>;
+  getUserBadges(userId: string): Promise<(Badge & { earnedAt: Date })[]>;
+  seedBadgesIfEmpty(): Promise<void>;
 }
 
 function slugUsername(name: string | undefined | null, email: string | undefined | null): string {
@@ -103,6 +132,16 @@ class DatabaseStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  async updateUser(id: string, data: Partial<Pick<User, "displayName" | "bio">>): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set(data)
+      .where(eq(users.id, id))
+      .returning();
+    if (!user) throw new Error("User not found");
     return user;
   }
 
@@ -439,6 +478,187 @@ class DatabaseStorage implements IStorage {
       media: r.media,
       likeCount: r.likeCount,
     }));
+  }
+
+  async getMediaByExternalId(externalId: string, type: string): Promise<Media | undefined> {
+    if (!externalId) return undefined;
+    const [m] = await db
+      .select()
+      .from(media)
+      .where(and(eq(media.externalId, externalId), eq(media.type, type)));
+    return m;
+  }
+
+  async ensureMedia(data: InsertMedia): Promise<Media> {
+    const extId = data.externalId ?? "";
+    const type = data.type;
+    if (extId && type) {
+      const existing = await this.getMediaByExternalId(extId, type);
+      if (existing) return existing;
+    }
+    const insertData = {
+      ...data,
+      coverGradient: data.coverGradient || "from-slate-700 to-slate-900",
+    };
+    return this.createMedia(insertData);
+  }
+
+  async addWatched(userId: string, mediaId: string): Promise<void> {
+    await db
+      .insert(watched)
+      .values({ userId, mediaId })
+      .onConflictDoNothing();
+  }
+
+  async removeWatched(userId: string, mediaId: string): Promise<void> {
+    await db
+      .delete(watched)
+      .where(and(eq(watched.userId, userId), eq(watched.mediaId, mediaId)));
+  }
+
+  async isWatched(userId: string, mediaId: string): Promise<boolean> {
+    const [row] = await db
+      .select()
+      .from(watched)
+      .where(and(eq(watched.userId, userId), eq(watched.mediaId, mediaId)));
+    return !!row;
+  }
+
+  async likeMedia(userId: string, mediaId: string): Promise<void> {
+    await db
+      .insert(mediaLikes)
+      .values({ userId, mediaId })
+      .onConflictDoNothing();
+  }
+
+  async unlikeMedia(userId: string, mediaId: string): Promise<void> {
+    await db
+      .delete(mediaLikes)
+      .where(and(eq(mediaLikes.userId, userId), eq(mediaLikes.mediaId, mediaId)));
+  }
+
+  async hasLikedMedia(userId: string, mediaId: string): Promise<boolean> {
+    const [row] = await db
+      .select()
+      .from(mediaLikes)
+      .where(and(eq(mediaLikes.userId, userId), eq(mediaLikes.mediaId, mediaId)));
+    return !!row;
+  }
+
+  async getMediaStats(mediaId: string): Promise<{ watched: number; likes: number; listed: number }> {
+    const [watchedCount] = await db
+      .select({ c: count() })
+      .from(watched)
+      .where(eq(watched.mediaId, mediaId));
+    const [likesCount] = await db
+      .select({ c: count() })
+      .from(mediaLikes)
+      .where(eq(mediaLikes.mediaId, mediaId));
+    const [listedCount] = await db
+      .select({ c: count() })
+      .from(watchlist)
+      .where(eq(watchlist.mediaId, mediaId));
+    return {
+      watched: watchedCount?.c ?? 0,
+      likes: likesCount?.c ?? 0,
+      listed: listedCount?.c ?? 0,
+    };
+  }
+
+  async getProfileSettings(userId: string): Promise<ProfileSettings | undefined> {
+    const [row] = await db
+      .select()
+      .from(profileSettings)
+      .where(eq(profileSettings.userId, userId));
+    return row;
+  }
+
+  async updateProfileSettings(
+    userId: string,
+    data: Partial<Omit<ProfileSettings, "userId">>
+  ): Promise<ProfileSettings> {
+    const setData: Record<string, unknown> = {};
+    const keys: (keyof Omit<ProfileSettings, "userId">)[] = [
+      "bannerUrl", "bannerPosition", "themeAccent", "themeCustomColor",
+      "layoutOrder", "avatarFrameId", "pronouns", "aboutMe", "showBadges",
+    ];
+    for (const k of keys) {
+      if (data[k] !== undefined) setData[k] = data[k];
+    }
+    const defaults = {
+      bannerUrl: null,
+      bannerPosition: "center",
+      themeAccent: "amber",
+      themeCustomColor: null,
+      layoutOrder: ["favorites", "watchlist", "activity"],
+      avatarFrameId: null,
+      pronouns: null,
+      aboutMe: null,
+      showBadges: true,
+    };
+    if (Object.keys(setData).length === 0) {
+      await db.insert(profileSettings).values({ userId, ...defaults }).onConflictDoNothing();
+      const existing = await this.getProfileSettings(userId);
+      return existing!;
+    }
+    const [updated] = await db
+      .insert(profileSettings)
+      .values({ userId, ...defaults, ...data })
+      .onConflictDoUpdate({
+        target: profileSettings.userId,
+        set: setData as Record<string, unknown>,
+      })
+      .returning();
+    return updated!;
+  }
+
+  async getUserSubscription(userId: string): Promise<{ status: "free" | "pro" }> {
+    const [row] = await db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.userId, userId));
+    const status = (row?.status === "pro" || row?.status === "monthly" || row?.status === "yearly")
+      ? "pro"
+      : "free";
+    return { status };
+  }
+
+  async getBadges(): Promise<Badge[]> {
+    return db.select().from(badges).orderBy(badges.slug);
+  }
+
+  async getUserBadges(userId: string): Promise<(Badge & { earnedAt: Date })[]> {
+    const rows = await db
+      .select({ badge: badges, earnedAt: userBadges.earnedAt })
+      .from(userBadges)
+      .innerJoin(badges, eq(userBadges.badgeId, badges.id))
+      .where(eq(userBadges.userId, userId))
+      .orderBy(userBadges.earnedAt);
+    return rows.map((r) => ({ ...r.badge, earnedAt: r.earnedAt }));
+  }
+
+  async seedBadgesIfEmpty(): Promise<void> {
+    const existing = await db.select().from(badges).limit(1);
+    if (existing.length > 0) return;
+
+    const placeholderBadges = [
+      { slug: "first-review", name: "First Review", description: "Posted your first review", rarity: "common", category: "engagement" },
+      { slug: "avid-reader", name: "Avid Reader", description: "Logged 10 books", rarity: "common", category: "milestone" },
+      { slug: "film-buff", name: "Film Buff", description: "Logged 25 films", rarity: "rare", category: "milestone" },
+      { slug: "critic", name: "Critic", description: "Received 50 review likes", rarity: "epic", category: "engagement" },
+      { slug: "early-adopter", name: "Early Adopter", description: "Joined during beta", rarity: "legendary", category: "special" },
+    ];
+
+    await db.insert(badges).values(
+      placeholderBadges.map((b) => ({
+        slug: b.slug,
+        name: b.name,
+        description: b.description,
+        iconUrl: null,
+        rarity: b.rarity,
+        category: b.category,
+      }))
+    );
   }
 }
 

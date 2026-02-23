@@ -3,13 +3,14 @@ import type { Server } from "node:http";
 import { storage } from "./storage";
 import { authMiddleware } from "./auth";
 import { insertReviewSchema } from "@shared/schema";
-import { searchSpotifyAlbums, getSpotifyAlbum } from "./spotify";
-import { searchOpenLibraryBooks, getOpenLibraryBook, getTrendingBooks } from "./openlibrary";
+import { searchSpotifyAlbums, getSpotifyAlbum, getSpotifyAlbumDetails, getSpotifyArtistAlbums } from "./spotify";
+import { searchOpenLibraryBooks, getOpenLibraryBook, getTrendingBooks, getOpenLibraryDetails, getOpenLibraryAuthorWorks } from "./openlibrary";
 import {
   getTrendingMovies, getTrendingTv, getTrendingAnime,
   searchTmdbMovies, searchTmdbTv, searchTmdbAnime,
+  getTmdbDetails, getTmdbPersonCredits,
 } from "./tmdb";
-import { searchRawgGames, getTrendingGames } from "./rawg";
+import { searchRawgGames, getTrendingGames, getRawgGameDetails, getRawgGamesByDeveloper } from "./rawg";
 
 type RequestWithAuth = Request & { authUserId?: string; authPayload?: { name?: string; email?: string } };
 
@@ -31,8 +32,19 @@ export async function registerRoutes(
       name: authReq.authPayload?.name,
       email: authReq.authPayload?.email,
     });
-    const stats = await storage.getProfileStats(appUser.id);
-    res.json({ ...appUser, ...stats });
+    const [stats, profileSettings, subscription, badges] = await Promise.all([
+      storage.getProfileStats(appUser.id),
+      storage.getProfileSettings(appUser.id),
+      storage.getUserSubscription(appUser.id),
+      storage.getUserBadges(appUser.id),
+    ]);
+    res.json({
+      ...appUser,
+      ...stats,
+      profileSettings: profileSettings ?? null,
+      subscription: { status: subscription.status },
+      badges,
+    });
   });
 
   app.get("/api/trending/:type", async (req, res) => {
@@ -128,6 +140,49 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/discover/by-person", async (req, res) => {
+    const personId = req.query.personId as string;
+    const personName = (req.query.person as string) || (req.query.personName as string) || "";
+    const type = req.query.type as string;
+    const limit = parseInt(req.query.limit as string) || 24;
+    if (!personId || !type) {
+      return res.status(400).json({ message: "personId and type are required" });
+    }
+    const validTypes = ["movie", "tv", "anime", "book", "music", "game"];
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({ message: "type must be movie, tv, anime, book, music, or game" });
+    }
+    try {
+      let results: any[] = [];
+      switch (type) {
+        case "movie":
+        case "tv":
+        case "anime":
+          results = await getTmdbPersonCredits(personId, type, limit);
+          break;
+        case "music":
+          results = await getSpotifyArtistAlbums(personId, limit);
+          if (results.length === 0 && personName) {
+            results = await searchSpotifyAlbums(personName, limit);
+          }
+          break;
+        case "book":
+          results = await getOpenLibraryAuthorWorks(personId, limit);
+          if (results.length === 0 && personName) {
+            results = await searchOpenLibraryBooks(personName, limit);
+          }
+          break;
+        case "game":
+          results = await getRawgGamesByDeveloper(personId, limit);
+          break;
+      }
+      res.json(results);
+    } catch (err: any) {
+      console.error("Discover by person error:", err.message);
+      res.status(500).json({ message: "Failed to fetch media by person" });
+    }
+  });
+
   app.get("/api/users/top-reviewers", async (req, res) => {
     const limit = parseInt(req.query.limit as string) || 5;
     const result = await storage.getTopReviewers(limit);
@@ -137,15 +192,94 @@ export async function registerRoutes(
   app.get("/api/users/:id", async (req, res) => {
     const user = await storage.getUser(req.params.id);
     if (!user) return res.status(404).json({ message: "User not found" });
-    const stats = await storage.getProfileStats(req.params.id);
-    res.json({ ...user, ...stats });
+    const [stats, profileSettings, subscription, badges] = await Promise.all([
+      storage.getProfileStats(req.params.id),
+      storage.getProfileSettings(req.params.id),
+      storage.getUserSubscription(req.params.id),
+      storage.getUserBadges(req.params.id),
+    ]);
+    res.json({
+      ...user,
+      ...stats,
+      profileSettings: profileSettings ?? null,
+      subscription: { status: subscription.status },
+      badges,
+    });
   });
 
   app.get("/api/users/username/:username", async (req, res) => {
     const user = await storage.getUserByUsername(req.params.username);
     if (!user) return res.status(404).json({ message: "User not found" });
-    const stats = await storage.getProfileStats(user.id);
-    res.json({ ...user, ...stats });
+    const [stats, profileSettings, subscription, badges] = await Promise.all([
+      storage.getProfileStats(user.id),
+      storage.getProfileSettings(user.id),
+      storage.getUserSubscription(user.id),
+      storage.getUserBadges(user.id),
+    ]);
+    res.json({
+      ...user,
+      ...stats,
+      profileSettings: profileSettings ?? null,
+      subscription: { status: subscription.status },
+      badges,
+    });
+  });
+
+  app.get("/api/users/:id/profile-settings", async (req, res) => {
+    const user = await storage.getUser(req.params.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    const settings = await storage.getProfileSettings(req.params.id);
+    res.json(settings ?? null);
+  });
+
+  app.patch("/api/users/:id", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const targetId = req.params.id;
+    if (targetId !== authReq.authUserId) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    const body = req.body as { displayName?: string; bio?: string };
+    const updates: { displayName?: string; bio?: string } = {};
+    if (typeof body.displayName === "string") updates.displayName = body.displayName.slice(0, 100);
+    if (typeof body.bio === "string") updates.bio = body.bio.slice(0, 500);
+    if (Object.keys(updates).length === 0) {
+      const user = await storage.getUser(targetId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      return res.json(user);
+    }
+    const user = await storage.updateUser(targetId, updates);
+    res.json(user);
+  });
+
+  app.patch("/api/users/:id/profile-settings", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const targetId = req.params.id;
+    if (targetId !== authReq.authUserId) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    const sub = await storage.getUserSubscription(targetId);
+    const body = req.body as Record<string, unknown>;
+    const proFields = ["bannerUrl", "bannerPosition", "themeAccent", "themeCustomColor", "layoutOrder", "avatarFrameId"];
+    const data: Record<string, unknown> = { ...body };
+    if (sub.status !== "pro") {
+      for (const f of proFields) {
+        delete data[f];
+      }
+    }
+    const settings = await storage.updateProfileSettings(targetId, data as any);
+    res.json(settings);
+  });
+
+  app.get("/api/users/:id/badges", async (req, res) => {
+    const user = await storage.getUser(req.params.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    const userBadges = await storage.getUserBadges(req.params.id);
+    res.json(userBadges);
+  });
+
+  app.get("/api/badges", async (_req, res) => {
+    const list = await storage.getBadges();
+    res.json(list);
   });
 
   app.get("/api/media", async (req, res) => {
@@ -161,6 +295,91 @@ export async function registerRoutes(
     }
     const all = await storage.getAllMedia();
     res.json(all);
+  });
+
+  app.post("/api/media/ensure", async (req, res) => {
+    const body = req.body as {
+      type: string;
+      title: string;
+      creator?: string;
+      year?: string;
+      coverUrl?: string;
+      coverGradient?: string;
+      synopsis?: string;
+      tags?: string[];
+      rating?: string;
+      externalId?: string;
+    };
+    if (!body.type || !body.title) {
+      return res.status(400).json({ message: "type and title are required" });
+    }
+    const mediaType = body.type as "movie" | "tv" | "anime" | "book" | "music" | "game";
+    const m = await storage.ensureMedia({
+      type: mediaType,
+      title: body.title,
+      creator: body.creator ?? "",
+      year: body.year ?? "",
+      coverGradient: body.coverGradient ?? "from-slate-700 to-slate-900",
+      coverUrl: body.coverUrl ?? "",
+      synopsis: body.synopsis ?? "",
+      tags: body.tags ?? [],
+      rating: body.rating ?? "",
+      externalId: body.externalId ?? "",
+    });
+    res.json(m);
+  });
+
+  app.get("/api/details/:type/:externalId", async (req, res) => {
+    const type = req.params.type;
+    const externalId = decodeURIComponent(req.params.externalId);
+    try {
+      let details: any = null;
+      switch (type) {
+        case "movie":
+        case "tv":
+          details = await getTmdbDetails(externalId, type);
+          break;
+        case "anime":
+          details = await getTmdbDetails(externalId, "tv");
+          break;
+        case "music":
+          details = await getSpotifyAlbumDetails(externalId);
+          break;
+        case "book":
+          details = await getOpenLibraryDetails(externalId);
+          break;
+        case "game":
+          details = await getRawgGameDetails(externalId);
+          break;
+        default:
+          return res.status(400).json({ message: "Invalid type. Use movie, tv, anime, book, music, or game" });
+      }
+      if (!details) return res.status(404).json({ message: "Details not found" });
+      res.json(details);
+    } catch (err: any) {
+      console.error("Details fetch error:", err.message);
+      res.status(500).json({ message: "Failed to fetch details" });
+    }
+  });
+
+  app.get("/api/tmdb/:type/:tmdbId/details", async (req, res) => {
+    const { type, tmdbId } = req.params;
+    if (type !== "movie" && type !== "tv") {
+      return res.status(400).json({ message: "type must be movie or tv" });
+    }
+    try {
+      const details = await getTmdbDetails(tmdbId, type);
+      if (!details) return res.status(404).json({ message: "TMDB details not found" });
+      res.json(details);
+    } catch (err: any) {
+      console.error("TMDB details error:", err.message);
+      res.status(500).json({ message: "Failed to fetch TMDB details" });
+    }
+  });
+
+  app.get("/api/media/:id/stats", async (req, res) => {
+    const stats = await storage.getMediaStats(req.params.id);
+    res.json(stats);
   });
 
   app.get("/api/media/:id", async (req, res) => {
@@ -235,6 +454,64 @@ export async function registerRoutes(
         req.params.mediaId,
       );
       res.json({ onWatchlist: result });
+    },
+  );
+
+  app.post("/api/users/:userId/watched/:mediaId", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    if (req.params.userId !== authReq.authUserId) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    await storage.addWatched(String(req.params.userId), String(req.params.mediaId));
+    res.json({ ok: true });
+  });
+
+  app.delete("/api/users/:userId/watched/:mediaId", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    if (req.params.userId !== authReq.authUserId) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    await storage.removeWatched(String(req.params.userId), String(req.params.mediaId));
+    res.json({ ok: true });
+  });
+
+  app.get(
+    "/api/users/:userId/watched/check/:mediaId",
+    async (req, res) => {
+      const result = await storage.isWatched(
+        req.params.userId,
+        req.params.mediaId,
+      );
+      res.json({ watched: result });
+    },
+  );
+
+  app.post("/api/users/:userId/like-media/:mediaId", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    if (req.params.userId !== authReq.authUserId) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    await storage.likeMedia(String(req.params.userId), String(req.params.mediaId));
+    res.json({ ok: true });
+  });
+
+  app.delete("/api/users/:userId/like-media/:mediaId", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    if (req.params.userId !== authReq.authUserId) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    await storage.unlikeMedia(String(req.params.userId), String(req.params.mediaId));
+    res.json({ ok: true });
+  });
+
+  app.get(
+    "/api/users/:userId/like-media/check/:mediaId",
+    async (req, res) => {
+      const result = await storage.hasLikedMedia(
+        req.params.userId,
+        req.params.mediaId,
+      );
+      res.json({ liked: result });
     },
   );
 

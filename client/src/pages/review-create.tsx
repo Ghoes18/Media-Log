@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { StarRatingSelector } from "@/components/star-rating-selector";
 import { Textarea } from "@/components/ui/textarea";
 
 type MediaType = "movie" | "anime" | "book" | "tv" | "music" | "game";
@@ -174,7 +175,7 @@ export default function ReviewCreate() {
                     className="inline-flex items-center gap-2 rounded-full border bg-card/60 px-3 py-1 text-xs text-muted-foreground"
                     data-testid="badge-new"
                   >
-                    <Star className="h-3.5 w-3.5 fill-primary text-primary" />
+                    <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
                     log a feeling
                   </div>
                   <h2 className="mt-3 font-serif text-2xl font-semibold" data-testid="text-editor-title">
@@ -213,7 +214,7 @@ export default function ReviewCreate() {
                         Movie
                       </SelectItem>
                       <SelectItem value="anime" data-testid="option-medium-anime">
-                        Anime
+                        Animation
                       </SelectItem>
                       <SelectItem value="book" data-testid="option-medium-book">
                         Book
@@ -280,23 +281,9 @@ export default function ReviewCreate() {
                 <div className="grid gap-2">
                   <Label data-testid="label-rating">Rating</Label>
                   <div className="flex items-center gap-2">
-                    {Array.from({ length: 5 }).map((_, i) => {
-                      const v = i + 1;
-                      return (
-                        <Button
-                          key={v}
-                          variant={v <= rating ? "default" : "secondary"}
-                          size="icon"
-                          className="h-10 w-10 rounded-md"
-                          data-testid={`button-star-${v}`}
-                          onClick={() => setRating(v)}
-                        >
-                          <Star className="h-4 w-4" />
-                        </Button>
-                      );
-                    })}
+                    <StarRatingSelector value={rating} onChange={setRating} />
                     <Badge variant="secondary" className="rounded-full" data-testid="text-rating">
-                      {rating} / 5
+                      {Number.isInteger(rating) ? rating : rating.toFixed(1)} / 5
                     </Badge>
                   </div>
                 </div>

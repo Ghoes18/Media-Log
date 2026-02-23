@@ -4,9 +4,11 @@ import {
   text,
   varchar,
   integer,
-  boolean,
+  real,
   timestamp,
   primaryKey,
+  boolean,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -35,6 +37,7 @@ export const media = pgTable("media", {
   synopsis: text("synopsis").default(""),
   tags: text("tags").array().default(sql`'{}'::text[]`),
   rating: text("rating").default(""),
+  externalId: text("external_id").default(""),
 });
 
 export const reviews = pgTable("reviews", {
@@ -47,7 +50,7 @@ export const reviews = pgTable("reviews", {
   mediaId: varchar("media_id", { length: 36 })
     .notNull()
     .references(() => media.id),
-  rating: integer("rating").notNull(),
+  rating: real("rating").notNull(),
   body: text("body").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -108,6 +111,85 @@ export const reviewLikes = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.reviewId] })],
 );
 
+export const mediaLikes = pgTable(
+  "media_likes",
+  {
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id),
+    mediaId: varchar("media_id", { length: 36 })
+      .notNull()
+      .references(() => media.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.mediaId] })],
+);
+
+export const watched = pgTable(
+  "watched",
+  {
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id),
+    mediaId: varchar("media_id", { length: 36 })
+      .notNull()
+      .references(() => media.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.mediaId] })],
+);
+
+export const profileSettings = pgTable("profile_settings", {
+  userId: varchar("user_id", { length: 36 })
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  bannerUrl: text("banner_url"),
+  bannerPosition: text("banner_position").default("center"),
+  themeAccent: text("theme_accent").default("amber"),
+  themeCustomColor: text("theme_custom_color"),
+  layoutOrder: jsonb("layout_order").$type<string[]>().default(["favorites", "watchlist", "activity"]),
+  avatarFrameId: varchar("avatar_frame_id", { length: 36 }),
+  pronouns: text("pronouns"),
+  aboutMe: text("about_me"),
+  showBadges: boolean("show_badges").default(true),
+});
+
+export const badges = pgTable("badges", {
+  id: varchar("id", { length: 36 })
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  iconUrl: text("icon_url"),
+  rarity: text("rarity").notNull().default("common"), // common | rare | epic | legendary
+  category: text("category").notNull().default("engagement"), // engagement | milestone | special
+});
+
+export const userBadges = pgTable(
+  "user_badges",
+  {
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    badgeId: varchar("badge_id", { length: 36 })
+      .notNull()
+      .references(() => badges.id, { onDelete: "cascade" }),
+    earnedAt: timestamp("earned_at").defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.badgeId] })],
+);
+
+export const subscriptions = pgTable("subscriptions", {
+  userId: varchar("user_id", { length: 36 })
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("free"), // free | pro | monthly | yearly
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  currentPeriodEnd: timestamp("current_period_end"),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
@@ -124,3 +206,7 @@ export type InsertMedia = z.infer<typeof insertMediaSchema>;
 export type Media = typeof media.$inferSelect;
 export type InsertReview = z.infer<typeof insertReviewSchema>;
 export type Review = typeof reviews.$inferSelect;
+export type ProfileSettings = typeof profileSettings.$inferSelect;
+export type Badge = typeof badges.$inferSelect;
+export type UserBadge = typeof userBadges.$inferSelect;
+export type Subscription = typeof subscriptions.$inferSelect;

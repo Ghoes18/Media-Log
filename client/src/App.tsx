@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import { queryClient } from "./lib/queryClient";
 import { AuthProvider } from "./lib/auth-context";
+import { GrayscaleMediaProvider } from "./lib/grayscale-media-context";
 import { ThemeProvider } from "@/components/theme-provider";
 
 import NotFound from "./pages/not-found";
@@ -35,10 +36,12 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AuthProvider>
+          <GrayscaleMediaProvider>
           <TooltipProvider>
             <Toaster />
             <Router />
           </TooltipProvider>
+          </GrayscaleMediaProvider>
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>

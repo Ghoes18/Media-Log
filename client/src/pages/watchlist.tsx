@@ -133,7 +133,7 @@ export default function Watchlist() {
                   className="inline-flex items-center gap-2 rounded-full border bg-card/60 px-3 py-1 text-xs text-muted-foreground"
                   data-testid="badge-watchlist"
                 >
-                  <Star className="h-3.5 w-3.5 fill-primary text-primary" />
+                  <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
                   one list, many mediums
                 </div>
                 <h2 className="mt-3 font-serif text-2xl font-semibold" data-testid="text-watchlist-title">
@@ -153,7 +153,7 @@ export default function Watchlist() {
                     Movies
                   </TabsTrigger>
                   <TabsTrigger value="anime" className="rounded-md" data-testid="tab-anime">
-                    Anime
+                    Animation
                   </TabsTrigger>
                   <TabsTrigger value="book" className="rounded-md" data-testid="tab-book">
                     Books
@@ -185,10 +185,10 @@ export default function Watchlist() {
                   >
                     <div className="flex items-center gap-4">
                       <div
-                        className="relative h-20 w-16 overflow-hidden rounded-md border bg-card shadow-sm"
+                        className="media-cover relative h-20 w-16 overflow-hidden rounded-md border bg-card shadow-sm"
                         data-testid={`img-cover-${it.id}`}
                       >
-                        <div className={cn("absolute inset-0 bg-gradient-to-br grayscale contrast-125", it.coverGradient)} />
+                        <div className={cn("absolute inset-0 bg-gradient-to-br contrast-125", it.coverGradient)} />
                         {it.coverUrl && (
                           <img src={it.coverUrl} alt={it.title} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
                         )}

@@ -17,6 +17,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
+import { useEnsureMedia } from "@/lib/use-ensure-media";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -70,21 +71,58 @@ function Stars({ value }: { value: number }) {
         const idx = i + 1;
         const active = idx <= full;
         const halfActive = !active && half && idx === full + 1;
-        return (
+        return halfActive ? (
+          <span key={i} className="relative inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+            <Star className="h-3.5 w-3.5 text-muted-foreground/35" strokeWidth={2} />
+            <span className="absolute inset-0 w-1/2 overflow-hidden">
+              <Star className="h-3.5 w-3.5 min-w-[14px] fill-amber-500 text-amber-500" strokeWidth={0} />
+            </span>
+          </span>
+        ) : (
           <Star
             key={i}
             className={cn(
               "h-3.5 w-3.5",
-              active
-                ? "fill-primary text-primary"
-                : halfActive
-                  ? "fill-primary/50 text-primary/60"
-                  : "text-muted-foreground/35",
+              active ? "fill-amber-500 text-amber-500" : "text-muted-foreground/35",
             )}
             strokeWidth={2}
           />
         );
       })}
+    </div>
+  );
+}
+
+function MediaCard({ m, itemId }: { m: any; itemId: string }) {
+  const { ensureAndNavigate } = useEnsureMedia();
+  return (
+    <div
+      data-testid={`link-media-${itemId}`}
+      role="button"
+      tabIndex={0}
+      onClick={() => ensureAndNavigate(m)}
+      onKeyDown={(e) => e.key === "Enter" && ensureAndNavigate(m)}
+      className="group cursor-pointer"
+    >
+      <motion.div
+        whileHover={{ y: -4 }}
+        transition={{ duration: 0.2 }}
+        className="rounded-md"
+      >
+        <Cover m={m} />
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {(m.tags ?? []).slice(0, 3).map((t: string) => (
+            <Badge
+              key={t}
+              variant="secondary"
+              className="rounded-full"
+              data-testid={`badge-tag-${itemId}-${t}`}
+            >
+              {t}
+            </Badge>
+          ))}
+        </div>
+      </motion.div>
     </div>
   );
 }
@@ -96,12 +134,12 @@ function Cover({ m }: { m: any }) {
   return (
     <div
       className={cn(
-        "relative aspect-[3/4] w-full overflow-hidden rounded-md border bg-card shadow-sm",
+        "media-cover relative aspect-[3/4] w-full overflow-hidden rounded-md border bg-card shadow-sm",
         "bg-noise",
       )}
       data-testid={`cover-${itemId}`}
     >
-      <div className={cn("absolute inset-0 bg-gradient-to-br grayscale contrast-125", m.coverGradient || "from-slate-700 to-slate-900")} />
+      <div className={cn("absolute inset-0 bg-gradient-to-br contrast-125", m.coverGradient || "from-slate-700 to-slate-900")} />
       {m.coverUrl && (
         <img
           src={m.coverUrl}
@@ -126,7 +164,7 @@ function Cover({ m }: { m: any }) {
           </div>
           {displayRating !== null && (
             <div className="flex items-center gap-1 rounded-full bg-black/35 px-2 py-1 text-xs text-white ring-1 ring-white/15 backdrop-blur-sm">
-              <Star className="h-3.5 w-3.5 fill-white/90 text-white/90" />
+              <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
               {displayRating.toFixed(1)}
             </div>
           )}
@@ -163,7 +201,7 @@ function TopNav({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search films, anime, books, TV, music, games…"
+            placeholder="Search films, animation, books, TV, music, games…"
             className="h-7 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
             data-testid="input-search"
           />
@@ -206,7 +244,7 @@ function TopNav({
                   <Input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search films, anime, books, TV, music, games…"
+                    placeholder="Search films, animation, books, TV, music, games…"
                     className="h-9 rounded-md"
                     data-testid="input-search-mobile"
                   />
@@ -273,21 +311,21 @@ function SocialProofStrip({
     <div className="grid grid-cols-3 gap-2 sm:gap-3" data-testid="social-proof-strip">
       <div className="rounded-md border bg-card/60 p-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Heart className="h-3.5 w-3.5 text-primary" />
+          <Heart className="h-3.5 w-3.5 text-red-600" />
           Community reviews
         </div>
         <div className="mt-1 font-serif text-lg font-semibold">{reviewCount}</div>
       </div>
       <div className="rounded-md border bg-card/60 p-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <TrendingUp className="h-3.5 w-3.5 text-primary" />
+          <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
           Trending now
         </div>
         <div className="mt-1 font-serif text-lg font-semibold">{discoverCount}</div>
       </div>
       <div className="rounded-md border bg-card/60 p-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Star className="h-3.5 w-3.5 text-primary" />
+          <Star className="h-3.5 w-3.5 text-amber-500" />
           Top reviewers
         </div>
         <div className="mt-1 font-serif text-lg font-semibold">{reviewerCount}</div>
@@ -389,8 +427,8 @@ export default function Home() {
                     className="inline-flex items-center gap-2 rounded-full border bg-card/60 px-3 py-1 text-xs text-muted-foreground"
                     data-testid="badge-slogan"
                   >
-                    <Star className="h-3.5 w-3.5 fill-primary text-primary" />
-                    taste across films, anime, books, TV, music & games
+                    <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
+                    taste across films, animation, books, TV, music & games
                   </div>
                   <h1
                     className="mt-3 font-serif text-3xl font-semibold tracking-tight sm:text-4xl"
@@ -448,7 +486,7 @@ export default function Home() {
                       Movies
                     </TabsTrigger>
                     <TabsTrigger value="anime" className="rounded-md" data-testid="tab-anime">
-                      Anime
+                      Animation
                     </TabsTrigger>
                     <TabsTrigger value="book" className="rounded-md" data-testid="tab-book">
                       Books
@@ -491,27 +529,7 @@ export default function Home() {
                   media.slice(0, 6).map((m: any, idx: number) => {
                     const itemId = m.id || m.externalId || `item-${idx}`;
                     return (
-                      <div key={`${m.type}-${itemId}`} data-testid={`link-media-${itemId}`} className="group">
-                        <motion.div
-                          whileHover={{ y: -4 }}
-                          transition={{ duration: 0.2 }}
-                          className="rounded-md"
-                        >
-                          <Cover m={m} />
-                          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                            {(m.tags ?? []).slice(0, 3).map((t: string) => (
-                              <Badge
-                                key={t}
-                                variant="secondary"
-                                className="rounded-full"
-                                data-testid={`badge-tag-${itemId}-${t}`}
-                              >
-                                {t}
-                              </Badge>
-                            ))}
-                          </div>
-                        </motion.div>
-                      </div>
+                      <MediaCard key={`${m.type}-${itemId}`} m={m} itemId={itemId} />
                     );
                   })
                 )}
@@ -521,7 +539,7 @@ export default function Home() {
             <div className="mt-6">
               <div className="flex items-end justify-between">
                 <div className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-primary" />
+                  <TrendingUp className="h-5 w-5 text-emerald-500" />
                   <h2 className="font-serif text-xl font-semibold" data-testid="text-popular-title">
                     Popular reviews this week
                   </h2>
@@ -614,7 +632,7 @@ export default function Home() {
                                   className={cn(
                                     "mr-2 h-4 w-4",
                                     isLiked
-                                      ? "fill-primary text-primary"
+                                      ? "fill-red-600 text-red-600"
                                       : "text-muted-foreground",
                                   )}
                                   strokeWidth={2}
@@ -717,7 +735,7 @@ export default function Home() {
                   {favoritesData.slice(0, 4).map((m: any) => (
                     <Link key={m.id} href={`/m/${m.id}`} data-testid={`link-fave-${m.id}`}>
                       <div className="overflow-hidden rounded-md border bg-card shadow-sm">
-                        <div className={cn("relative aspect-[3/4] bg-gradient-to-br grayscale contrast-125", m.coverGradient)}>
+                        <div className={cn("media-cover relative aspect-[3/4] bg-gradient-to-br contrast-125", m.coverGradient)}>
                           {m.coverUrl && (
                             <img src={m.coverUrl} alt={m.title} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
                           )}
@@ -731,7 +749,7 @@ export default function Home() {
 
             <Card className="rounded-lg border border-border bg-card p-5" data-testid="card-top-reviewers">
               <div className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-primary" />
+                <TrendingUp className="h-4 w-4 text-emerald-500" />
                 <div className="font-serif text-lg font-semibold" data-testid="text-top-reviewers-title">
                   Top Reviewers
                 </div>
@@ -802,8 +820,8 @@ export default function Home() {
                   {watchlistData.slice(0, 5).map((m: any) => (
                     <Link key={m.id} href={`/m/${m.id}`} data-testid={`row-watchlist-${m.id}`}>
                       <div className="flex items-center gap-3 rounded-md border bg-card/60 p-3 hover:bg-card/80 transition">
-                        <div className="relative h-10 w-10 overflow-hidden rounded-md border bg-card shadow-sm">
-                          <div className={cn("h-full w-full bg-gradient-to-br grayscale contrast-125", m.coverGradient)} />
+                        <div className="media-cover relative h-10 w-10 overflow-hidden rounded-md border bg-card shadow-sm">
+                          <div className={cn("h-full w-full bg-gradient-to-br contrast-125", m.coverGradient)} />
                           {m.coverUrl && (
                             <img src={m.coverUrl} alt={m.title} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
                           )}

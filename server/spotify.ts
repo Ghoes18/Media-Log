@@ -121,6 +121,25 @@ export async function searchMusicBrainz(query: string, limit = 10) {
   return results;
 }
 
+export async function getSpotifyArtistAlbums(artistId: string, limit = 24) {
+  try {
+    const data = await spotifyFetch(
+      `/artists/${artistId}/albums?limit=50&include_groups=album,single`
+    );
+    return (data.items || []).slice(0, limit).map((album: any) => ({
+      externalId: album.id,
+      title: album.name,
+      creator: (album.artists || []).map((a: { name?: string }) => a.name).join(", "),
+      year: album.release_date?.slice(0, 4) || "",
+      coverUrl: album.images?.[0]?.url || "",
+      tags: album.genres?.length ? album.genres : [],
+      type: "music" as const,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function getSpotifyAlbum(albumId: string) {
   try {
     const album = await spotifyFetch(`/albums/${albumId}`);
@@ -157,4 +176,88 @@ export async function getMusicBrainzAlbum(mbid: string) {
     tags: (rg.tags || []).slice(0, 3).map((t: any) => t.name),
     type: "music" as const,
   };
+}
+
+export interface SpotifyAlbumDetails {
+  externalId: string;
+  type: "music";
+  title: string;
+  creator: string;
+  year: string;
+  coverUrl: string;
+  backdropUrl: string | null;
+  synopsis: string;
+  genres: string[];
+  tracks: { name: string; trackNumber: number; durationMs: number; artists: string; previewUrl: string | null }[];
+  label: string;
+  copyrights: string[];
+  popularity: number;
+  totalTracks: number;
+  releaseDate: string;
+  releaseDatePrecision: string;
+  externalUrl: string | null;
+  albumType: string;
+  artists: { id: string; name: string; externalUrl: string }[];
+  images: { url: string; width: number; height: number }[];
+}
+
+export async function getSpotifyAlbumDetails(albumId: string): Promise<SpotifyAlbumDetails | null> {
+  try {
+    const album = await spotifyFetch(`/albums/${albumId}`);
+    let genres: string[] = album.genres || [];
+    if (genres.length === 0 && album.artists?.[0]?.id) {
+      try {
+        const artist = await spotifyFetch(`/artists/${album.artists[0].id}`);
+        genres = artist.genres || [];
+      } catch {
+        // ignore
+      }
+    }
+    const tracks = (album.tracks?.items || []).map((t: any) => ({
+      name: t.name || "",
+      trackNumber: t.track_number || 0,
+      durationMs: t.duration_ms || 0,
+      artists: (t.artists || []).map((a: any) => a.name).join(", "),
+      previewUrl: t.preview_url || null,
+    }));
+    const copyrights = (album.copyrights || []).map((c: any) => c.text).filter(Boolean);
+    const artists = (album.artists || []).map((a: any) => ({
+      id: a.id || "",
+      name: a.name || "",
+      externalUrl: a.external_urls?.spotify || "",
+    }));
+    const images = (album.images || []).map((img: any) => ({
+      url: img.url,
+      width: img.width || 0,
+      height: img.height || 0,
+    }));
+    const year = album.release_date?.slice(0, 4) || "";
+    const creator = artists.map((a: { name?: string }) => a.name).join(", ");
+    return {
+      externalId: album.id,
+      type: "music",
+      title: album.name || "",
+      creator,
+      year,
+      coverUrl: album.images?.[0]?.url || "",
+      backdropUrl: album.images?.[0]?.url || null,
+      synopsis: album.total_tracks
+        ? `${album.total_tracks} tracks. Released ${album.release_date || "unknown"}.${album.label ? ` Label: ${album.label}.` : ""}`
+        : "",
+      genres,
+      tracks,
+      label: album.label || "",
+      copyrights,
+      popularity: album.popularity ?? 0,
+      totalTracks: album.total_tracks ?? 0,
+      releaseDate: album.release_date || "",
+      releaseDatePrecision: album.release_date_precision || "year",
+      externalUrl: album.external_urls?.spotify || null,
+      albumType: album.album_type || "album",
+      artists,
+      images,
+    };
+  } catch {
+    return null;
+  }
 }
