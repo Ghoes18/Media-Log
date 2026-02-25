@@ -1,0 +1,2 @@
+ALTER TABLE "conversations" DROP CONSTRAINT "conversations_participant1_id_participant2_id_pk";--> statement-breakpoint
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_participants_unique" UNIQUE("participant1_id","participant2_id");

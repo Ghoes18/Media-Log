@@ -20,6 +20,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useEnsureMedia } from "@/lib/use-ensure-media";
 
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AdSlot } from "@/components/ads/AdSlot";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,8 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { BottomNav } from "@/components/BottomNav";
+import { Footer } from "@/components/Footer";
 
 type MediaType = "movie" | "anime" | "book" | "tv" | "music" | "game";
 
@@ -184,38 +187,40 @@ function TopNav({
   currentUser: any;
 }) {
   return (
-    <div className="sticky top-0 z-40 border-b bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
-      <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
+    <div className="sticky top-0 z-40 w-full pt-3 pb-2 sm:pt-4 sm:pb-3 px-4 sm:px-6">
+      {/* Background blur pill for the top gap to avoid content showing above the navbar */}
+      <div className="absolute inset-x-0 top-0 h-4 bg-background/80 backdrop-blur-xl pointer-events-none" />
+      <div className="relative mx-auto flex max-w-6xl items-center gap-3 rounded-2xl border border-border/50 bg-background/60 px-4 py-3 shadow-lg backdrop-blur-xl supports-[backdrop-filter]:bg-background/40 transition-all">
         <Link href="/" data-testid="link-home" className="group flex items-center gap-2">
-          <div className="grid h-9 w-9 place-items-center rounded-md bg-foreground ring-1 ring-border">
+          <div className="grid h-9 w-9 place-items-center rounded-xl bg-foreground/5 ring-1 ring-border/50 transition-colors group-hover:bg-foreground/10">
             <span className="font-brand text-lg font-semibold text-primary">T</span>
           </div>
           <div className="hidden sm:block">
-            <div className="font-brand text-[15px] font-semibold leading-tight">Tastelog</div>
-            <div className="text-xs text-muted-foreground">Your taste, across mediums</div>
+            <div className="font-brand text-[15px] font-semibold leading-tight text-foreground">Tastelog</div>
+            <div className="text-xs font-medium text-muted-foreground">Your taste, across mediums</div>
           </div>
         </Link>
 
-        <div className="ml-auto hidden w-[420px] max-w-full items-center gap-2 rounded-md border bg-card/60 px-3 py-2 shadow-sm backdrop-blur sm:flex">
+        <div className="ml-auto hidden w-[420px] max-w-full items-center gap-2 rounded-xl border border-border/50 bg-background/50 px-3 py-2 shadow-inner transition-colors focus-within:bg-background/80 sm:flex">
           <Search className="h-4 w-4 text-muted-foreground" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search films, animation, books, TV, music, games…"
-            className="h-7 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+            className="h-7 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/70"
             data-testid="input-search"
           />
-          <Badge variant="secondary" className="rounded-full">
+          <Badge variant="secondary" className="rounded-md px-1.5 py-0.5 text-[10px] font-medium bg-muted/80 text-muted-foreground">
             ⌘K
           </Badge>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3 pl-2">
           <ThemeToggle />
 
-          <Button size="sm" className="rounded-md" data-testid="button-log" asChild>
+          <Button skeuo size="sm" className="rounded-xl shadow-sm font-semibold tracking-wide" data-testid="button-log" asChild>
             <Link href="/review/new" data-testid="link-new-review">
-              <Plus className="size-4" />
+              <Plus className="mr-1.5 size-4" />
               Log
             </Link>
           </Button>
@@ -225,27 +230,27 @@ function TopNav({
               <Button
                 variant="secondary"
                 size="icon"
-                className="rounded-md sm:hidden"
+                className="rounded-xl shadow-sm sm:hidden"
                 data-testid="button-open-search"
               >
                 <Search className="h-4 w-4" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="top" className="p-0">
-              <SheetHeader className="px-4 pt-4">
-                <SheetTitle className="font-serif">Search</SheetTitle>
+            <SheetContent side="top" className="p-0 rounded-b-2xl border-b border-border/50 bg-background/95 backdrop-blur-xl">
+              <SheetHeader className="px-4 pt-6">
+                <SheetTitle className="font-serif text-xl">Search</SheetTitle>
                 <SheetDescription>
                   Find something to review, save, or browse.
                 </SheetDescription>
               </SheetHeader>
-              <div className="px-4 pb-4">
-                <div className="mt-3 flex items-center gap-2 rounded-md border bg-card px-3 py-2">
+              <div className="px-4 pb-6 mt-4">
+                <div className="flex items-center gap-2 rounded-xl border border-border/50 bg-muted/30 px-3 py-2 shadow-inner">
                   <Search className="h-4 w-4 text-muted-foreground" />
                   <Input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search films, animation, books, TV, music, games…"
-                    className="h-9 rounded-md"
+                    placeholder="Search films, animation, books…"
+                    className="h-10 border-0 bg-transparent text-base focus-visible:ring-0 shadow-none px-1"
                     data-testid="input-search-mobile"
                   />
                 </div>
@@ -254,16 +259,16 @@ function TopNav({
           </Sheet>
 
           {currentUser ? (
-            <Link href={`/u/${currentUser.username}`} data-testid="link-profile" className="grid place-items-center">
-              <Avatar className="h-9 w-9 ring-1 ring-border" data-testid="avatar-you">
+            <Link href={`/u/${currentUser.username}`} data-testid="link-profile" className="grid place-items-center ml-1">
+              <Avatar className="h-9 w-9 ring-2 ring-background transition-transform hover:scale-105" data-testid="avatar-you">
                 <AvatarImage alt={currentUser.displayName} src={currentUser.avatarUrl ?? ""} />
-                  <AvatarFallback className="bg-primary/15">
+                <AvatarFallback className="bg-primary/10 text-primary font-medium text-xs">
                   {currentUser.displayName.slice(0, 1)}
                 </AvatarFallback>
               </Avatar>
             </Link>
           ) : (
-            <Button size="sm" variant="secondary" className="rounded-md" asChild>
+            <Button size="sm" variant="secondary" className="rounded-xl ml-1 font-semibold" asChild>
               <Link href="/signin" data-testid="link-signin">Sign in</Link>
             </Button>
           )}
@@ -397,7 +402,15 @@ export default function Home() {
         await apiRequest("POST", `/api/reviews/${reviewId}/like`);
       }
     },
-    onSuccess: () => {
+    onSuccess: (_, { reviewId, liked: wasLiked }) => {
+      queryClient.setQueryData(["/api/reviews/popular"], (old: any[] | undefined) => {
+        if (!old) return old;
+        return old.map((r) =>
+          r.id === reviewId
+            ? { ...r, likeCount: Math.max(0, (r.likeCount ?? 0) + (wasLiked ? -1 : 1)) }
+            : r,
+        );
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/reviews/popular"] });
     },
   });
@@ -457,7 +470,7 @@ export default function Home() {
                       Explore
                     </Link>
                   </Button>
-                  <Button className="rounded-md" data-testid="button-start-review" asChild>
+                  <Button skeuo className="rounded-md" data-testid="button-start-review" asChild>
                     <Link href="/review/new" data-testid="link-start-review">
                       Start a review
                     </Link>
@@ -564,7 +577,7 @@ export default function Home() {
                 ) : (
                   popularReviews.map((r: any) => {
                     const isLiked = likedMap[r.id] ?? false;
-                    const likeCount = r.likeCount + (isLiked ? 1 : 0);
+                    const likeCount = r.likeCount ?? 0;
                     return (
                       <div
                         key={r.id}
@@ -618,33 +631,44 @@ export default function Home() {
                             </p>
 
                             <div className="mt-3 flex items-center gap-2">
-                              <Button
-                                variant={isLiked ? "default" : "secondary"}
-                                size="sm"
+                              <motion.button
+                                type="button"
                                 className={cn(
-                                  "rounded-md",
-                                  isLiked && "bg-primary/20 text-foreground border border-border",
+                                  "inline-flex items-center gap-1.5 rounded-md px-0 py-1 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+                                  isLiked ? "text-red-500 dark:text-red-400" : "text-muted-foreground hover:text-foreground",
                                 )}
                                 onClick={() => toggleLike(r.id)}
                                 data-testid={`button-like-${r.id}`}
+                                whileTap={{ scale: 0.92 }}
                               >
-                                <Heart
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    isLiked
-                                      ? "fill-red-600 text-red-600"
-                                      : "text-muted-foreground",
-                                  )}
-                                  strokeWidth={2}
-                                />
-                                {isLiked ? "Liked" : "Like"}
+                                <motion.span
+                                  key={isLiked ? "liked" : "unliked"}
+                                  initial={false}
+                                  animate={{
+                                    scale: isLiked ? [1, 1.4, 1] : 1,
+                                  }}
+                                  transition={{
+                                    duration: 0.5,
+                                    ease: [0.34, 1.56, 0.64, 1],
+                                  }}
+                                >
+                                  <Heart
+                                    className={cn(
+                                      "h-4 w-4",
+                                      isLiked
+                                        ? "fill-red-500 text-red-500 dark:fill-red-400 dark:text-red-400"
+                                        : "",
+                                    )}
+                                    strokeWidth={2}
+                                  />
+                                </motion.span>
                                 <span
-                                  className="ml-2 rounded-full bg-black/5 px-2 py-0.5 text-xs dark:bg-white/10"
+                                  className="tabular-nums"
                                   data-testid={`text-likes-${r.id}`}
                                 >
                                   {likeCount}
                                 </span>
-                              </Button>
+                              </motion.button>
 
                               <Button
                                 variant="ghost"
@@ -747,6 +771,16 @@ export default function Home() {
               </div>
             </Card>
 
+            {import.meta.env.VITE_AD_SLOT_HOME_RAIL && (
+              <Card className="rounded-lg border border-border bg-card p-4" data-testid="card-ad-home">
+                <AdSlot
+                  slotId={import.meta.env.VITE_AD_SLOT_HOME_RAIL}
+                  format="rectangle"
+                  className="flex justify-center"
+                />
+              </Card>
+            )}
+
             <Card className="rounded-lg border border-border bg-card p-5" data-testid="card-top-reviewers">
               <div className="flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-emerald-500" />
@@ -845,36 +879,11 @@ export default function Home() {
             </Card>
           </aside>
         </motion.div>
+
+        <Footer className="mt-8" />
       </main>
 
-      <div className="font-brand fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link href="/" data-testid="nav-home" className="text-sm font-medium hover:opacity-80">
-            Home
-          </Link>
-          <Link
-            href="/discover"
-            data-testid="nav-discover"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground"
-          >
-            Discover
-          </Link>
-          <Link
-            href="/watchlist"
-            data-testid="nav-watchlist"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground"
-          >
-            Watchlist
-          </Link>
-          <Link
-            href={currentUser ? `/u/${currentUser.username}` : "/signin"}
-            data-testid="nav-profile"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground"
-          >
-            Profile
-          </Link>
-        </div>
-      </div>
+      <BottomNav />
     </div>
   );
 }

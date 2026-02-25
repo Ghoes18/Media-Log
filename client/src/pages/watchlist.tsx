@@ -17,6 +17,7 @@ import {
   Tv2,
 } from "lucide-react";
 
+import { BottomNav } from "@/components/BottomNav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -281,34 +282,7 @@ export default function Watchlist() {
         </motion.div>
       </main>
 
-      <div className="font-brand fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link
-            href="/"
-            data-testid="nav-home"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground"
-          >
-            Home
-          </Link>
-          <Link
-            href="/discover"
-            data-testid="nav-discover"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground"
-          >
-            Discover
-          </Link>
-          <Link href="/watchlist" data-testid="nav-watchlist" className="text-sm font-medium hover:opacity-80">
-            Watchlist
-          </Link>
-          <Link
-            href="/u/you"
-            data-testid="nav-profile"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground"
-          >
-            Profile
-          </Link>
-        </div>
-      </div>
+      <BottomNav />
     </div>
   );
 }

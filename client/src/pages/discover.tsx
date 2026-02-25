@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 
+import { BottomNav } from "@/components/BottomNav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -871,7 +872,7 @@ export default function Discover() {
                               ? "bg-background shadow-sm"
                               : "text-muted-foreground hover:text-foreground"
                           )}
-                          aria-pressed={viewMode === "grid"}
+                          aria-pressed={viewMode === "grid" ? "true" : "false"}
                           aria-label="Grid view"
                         >
                           <LayoutGrid className="h-4 w-4" />
@@ -885,7 +886,7 @@ export default function Discover() {
                               ? "bg-background shadow-sm"
                               : "text-muted-foreground hover:text-foreground"
                           )}
-                          aria-pressed={viewMode === "list"}
+                          aria-pressed={viewMode === "list" ? "true" : "false"}
                           aria-label="List view"
                         >
                           <List className="h-4 w-4" />
@@ -972,7 +973,7 @@ export default function Discover() {
                                 ? "bg-background shadow-sm"
                                 : "text-muted-foreground hover:text-foreground"
                             )}
-                            aria-pressed={viewMode === "grid"}
+                            aria-pressed={viewMode === "grid" ? "true" : "false"}
                             aria-label="Grid view"
                           >
                             <LayoutGrid className="h-4 w-4" />
@@ -986,7 +987,7 @@ export default function Discover() {
                                 ? "bg-background shadow-sm"
                                 : "text-muted-foreground hover:text-foreground"
                             )}
-                            aria-pressed={viewMode === "list"}
+                            aria-pressed={viewMode === "list" ? "true" : "false"}
                             aria-label="List view"
                           >
                             <List className="h-4 w-4" />
@@ -1043,38 +1044,7 @@ export default function Discover() {
         </motion.div>
       </main>
 
-      <div className="font-brand fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link
-            href="/"
-            data-testid="nav-home"
-            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Home
-          </Link>
-          <Link
-            href="/discover"
-            data-testid="nav-discover"
-            className="text-sm font-medium transition-opacity hover:opacity-80"
-          >
-            Discover
-          </Link>
-          <Link
-            href="/watchlist"
-            data-testid="nav-watchlist"
-            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Watchlist
-          </Link>
-          <Link
-            href="/u/you"
-            data-testid="nav-profile"
-            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Profile
-          </Link>
-        </div>
-      </div>
+      <BottomNav />
     </div>
   );
 }

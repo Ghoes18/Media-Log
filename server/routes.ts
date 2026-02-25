@@ -2,15 +2,17 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "node:http";
 import { storage } from "./storage";
 import { authMiddleware } from "./auth";
+import { pushToUser } from "./ws";
 import { insertReviewSchema } from "@shared/schema";
 import { searchSpotifyAlbums, getSpotifyAlbum, getSpotifyAlbumDetails, getSpotifyArtistAlbums } from "./spotify";
 import { searchOpenLibraryBooks, getOpenLibraryBook, getTrendingBooks, getOpenLibraryDetails, getOpenLibraryAuthorWorks } from "./openlibrary";
 import {
   getTrendingMovies, getTrendingTv, getTrendingAnime,
   searchTmdbMovies, searchTmdbTv, searchTmdbAnime,
-  getTmdbDetails, getTmdbPersonCredits,
+  getTmdbDetails, getTmdbDetailsByImdbId, getTmdbPersonCredits,
 } from "./tmdb";
 import { searchRawgGames, getTrendingGames, getRawgGameDetails, getRawgGamesByDeveloper } from "./rawg";
+import { getImdbRatingByImdbId, getImdbTop250List, pickRandomFromImdbTop250 } from "./imdb";
 
 type RequestWithAuth = Request & { authUserId?: string; authPayload?: { name?: string; email?: string } };
 
@@ -183,6 +185,71 @@ export async function registerRoutes(
     }
   });
 
+  const VALID_CATEGORIES = ["movie", "tv", "anime", "book", "music", "game"] as const;
+
+  app.get("/api/picker/random", async (req, res) => {
+    const mode = (req.query.mode as string) || "categories";
+    const categoriesParam = (req.query.categories as string) || "";
+
+    if (mode === "imdbTop250") {
+      if (categoriesParam.trim()) {
+        return res.status(400).json({
+          message: "When mode is imdbTop250, do not pass categories",
+        });
+      }
+      try {
+        const items = await getImdbTop250List();
+        const picked = pickRandomFromImdbTop250(items);
+        if (!picked) {
+          return res.status(503).json({ message: "IMDb Top 250 list unavailable" });
+        }
+        return res.json(picked);
+      } catch (err: any) {
+        console.error("Picker IMDb Top 250 error:", err.message);
+        return res.status(500).json({ message: "Failed to pick from IMDb Top 250" });
+      }
+    }
+
+    if (mode !== "categories") {
+      return res.status(400).json({ message: "mode must be 'categories' or 'imdbTop250'" });
+    }
+
+    const categories = categoriesParam
+      .split(",")
+      .map((c) => c.trim().toLowerCase())
+      .filter((c) => VALID_CATEGORIES.includes(c as (typeof VALID_CATEGORIES)[number]));
+
+    if (categories.length === 0) {
+      return res.status(400).json({
+        message: "At least one category required. Use: movie, tv, anime, book, music, game",
+      });
+    }
+
+    try {
+      const fetchers: (() => Promise<any[]>)[] = [];
+      if (categories.includes("movie")) fetchers.push(() => getTrendingMovies(50));
+      if (categories.includes("tv")) fetchers.push(() => getTrendingTv(50));
+      if (categories.includes("anime")) fetchers.push(() => getTrendingAnime(50));
+      if (categories.includes("book")) fetchers.push(() => getTrendingBooks(50));
+      if (categories.includes("music")) fetchers.push(() => searchSpotifyAlbums("top hits 2024", 50));
+      if (categories.includes("game")) fetchers.push(() => getTrendingGames(50));
+
+      const results = await Promise.all(fetchers.map((fn) => fn().catch(() => [])));
+      const pooled = results.flat().filter((m) => m && (m.title || m.name));
+
+      if (pooled.length === 0) {
+        return res.status(503).json({ message: "No media available for selected categories" });
+      }
+
+      const idx = Math.floor(Math.random() * pooled.length);
+      const picked = pooled[idx];
+      res.json(picked);
+    } catch (err: any) {
+      console.error("Picker random error:", err.message);
+      res.status(500).json({ message: "Failed to pick random media" });
+    }
+  });
+
   app.get("/api/users/top-reviewers", async (req, res) => {
     const limit = parseInt(req.query.limit as string) || 5;
     const result = await storage.getTopReviewers(limit);
@@ -238,10 +305,11 @@ export async function registerRoutes(
     if (targetId !== authReq.authUserId) {
       return res.status(403).json({ message: "Forbidden" });
     }
-    const body = req.body as { displayName?: string; bio?: string };
-    const updates: { displayName?: string; bio?: string } = {};
+    const body = req.body as { displayName?: string; bio?: string; avatarUrl?: string };
+    const updates: { displayName?: string; bio?: string; avatarUrl?: string } = {};
     if (typeof body.displayName === "string") updates.displayName = body.displayName.slice(0, 100);
     if (typeof body.bio === "string") updates.bio = body.bio.slice(0, 500);
+    if (typeof body.avatarUrl === "string") updates.avatarUrl = body.avatarUrl.slice(0, 1_000_000);
     if (Object.keys(updates).length === 0) {
       const user = await storage.getUser(targetId);
       if (!user) return res.status(404).json({ message: "User not found" });
@@ -334,27 +402,35 @@ export async function registerRoutes(
     const externalId = decodeURIComponent(req.params.externalId);
     try {
       let details: any = null;
-      switch (type) {
-        case "movie":
-        case "tv":
-          details = await getTmdbDetails(externalId, type);
-          break;
-        case "anime":
-          details = await getTmdbDetails(externalId, "tv");
-          break;
-        case "music":
-          details = await getSpotifyAlbumDetails(externalId);
-          break;
-        case "book":
-          details = await getOpenLibraryDetails(externalId);
-          break;
-        case "game":
-          details = await getRawgGameDetails(externalId);
-          break;
-        default:
-          return res.status(400).json({ message: "Invalid type. Use movie, tv, anime, book, music, or game" });
+      if (type === "movie" && /^tt\d+$/.test(externalId)) {
+        details = await getTmdbDetailsByImdbId(externalId);
+      } else {
+        switch (type) {
+          case "movie":
+          case "tv":
+            details = await getTmdbDetails(externalId, type);
+            break;
+          case "anime":
+            details = await getTmdbDetails(externalId, "tv");
+            break;
+          case "music":
+            details = await getSpotifyAlbumDetails(externalId);
+            break;
+          case "book":
+            details = await getOpenLibraryDetails(externalId);
+            break;
+          case "game":
+            details = await getRawgGameDetails(externalId);
+            break;
+          default:
+            return res.status(400).json({ message: "Invalid type. Use movie, tv, anime, book, music, or game" });
+        }
       }
       if (!details) return res.status(404).json({ message: "Details not found" });
+      if (details.imdbId && (type === "movie" || type === "tv" || type === "anime")) {
+        const imdbRating = await getImdbRatingByImdbId(details.imdbId);
+        if (imdbRating) (details as any).imdbRating = imdbRating;
+      }
       res.json(details);
     } catch (err: any) {
       console.error("Details fetch error:", err.message);
@@ -637,6 +713,144 @@ export async function registerRoutes(
       console.error("Open Library book error:", err.message);
       res.status(500).json({ message: "Failed to get book details" });
     }
+  });
+
+  // ── Direct Messaging ───────────────────────────────────────────────────────
+
+  // GET /api/conversations?status=active|request
+  app.get("/api/conversations", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const status = req.query.status as string | undefined;
+    const convs = await storage.getConversationsForUser(appUser.id, status);
+    res.json(convs);
+  });
+
+  // GET /api/conversations/unread-count
+  app.get("/api/conversations/unread-count", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const count = await storage.getUnreadCount(appUser.id);
+    res.json({ count });
+  });
+
+  // POST /api/conversations  { recipientId }
+  app.post("/api/conversations", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const { recipientId } = req.body as { recipientId?: string };
+    if (!recipientId) return res.status(400).json({ message: "recipientId required" });
+    if (recipientId === appUser.id) return res.status(400).json({ message: "Cannot message yourself" });
+    const conv = await storage.getOrCreateConversation(appUser.id, recipientId);
+    res.status(201).json(conv);
+  });
+
+  // GET /api/conversations/:id/messages?before=<timestamp>&limit=50
+  app.get("/api/conversations/:id/messages", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const conv = await storage.getConversationById(req.params.id as string);
+    if (!conv) return res.status(404).json({ message: "Conversation not found" });
+    if (conv.participant1Id !== appUser.id && conv.participant2Id !== appUser.id) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    const before = req.query.before ? new Date(req.query.before as string) : undefined;
+    const limit = req.query.limit ? Number.parseInt(req.query.limit as string) : 50;
+    const msgs = await storage.getMessages(conv.id, before, limit);
+    res.json(msgs);
+  });
+
+  // POST /api/conversations/:id/messages  { body }
+  app.post("/api/conversations/:id/messages", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const conv = await storage.getConversationById(req.params.id as string);
+    if (!conv) return res.status(404).json({ message: "Conversation not found" });
+    if (conv.participant1Id !== appUser.id && conv.participant2Id !== appUser.id) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    if (conv.status === "declined") {
+      return res.status(403).json({ message: "This conversation was declined" });
+    }
+    const { body } = req.body as { body?: string };
+    if (!body?.trim()) return res.status(400).json({ message: "Message body required" });
+
+    try {
+      const msg = await storage.createMessage(conv.id, appUser.id, body.trim());
+      const recipientId = conv.participant1Id === appUser.id ? conv.participant2Id : conv.participant1Id;
+
+      const requestCount = conv.status === "request"
+        ? await storage.getRequestMessageCount(conv.id, appUser.id)
+        : null;
+
+      pushToUser(recipientId, {
+        type: "new_message",
+        payload: {
+          message: msg,
+          conversationId: conv.id,
+          senderId: appUser.id,
+        },
+      });
+
+      res.status(201).json({ message: msg, requestCount });
+    } catch (err: any) {
+      if (err.message === "MESSAGE_LIMIT_REACHED") {
+        return res.status(403).json({ message: "You have reached the 3-message limit for pending requests" });
+      }
+      throw err;
+    }
+  });
+
+  // PATCH /api/conversations/:id/accept
+  app.patch("/api/conversations/:id/accept", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    try {
+      const conv = await storage.acceptConversation(req.params.id as string, appUser.id);
+      const requesterId = conv.requestedById;
+      if (requesterId) {
+        pushToUser(requesterId, {
+          type: "conversation_updated",
+          payload: { conversationId: conv.id, status: "active" },
+        });
+      }
+      res.json(conv);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  // PATCH /api/conversations/:id/decline
+  app.patch("/api/conversations/:id/decline", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    try {
+      const conv = await storage.declineConversation(req.params.id as string, appUser.id);
+      res.json(conv);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  // PATCH /api/conversations/:id/read
+  app.patch("/api/conversations/:id/read", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const conv = await storage.getConversationById(req.params.id as string);
+    if (!conv) return res.status(404).json({ message: "Conversation not found" });
+    if (conv.participant1Id !== appUser.id && conv.participant2Id !== appUser.id) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    const readAt = new Date();
+    await storage.markMessagesAsRead(conv.id, appUser.id);
+
+    const otherUserId = conv.participant1Id === appUser.id ? conv.participant2Id : conv.participant1Id;
+    pushToUser(otherUserId, {
+      type: "messages_read",
+      payload: { conversationId: conv.id, readAt: readAt.toISOString() },
+    });
+
+    res.json({ ok: true });
   });
 
   return httpServer;

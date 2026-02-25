@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useSubscription } from "@/lib/use-subscription";
@@ -9,7 +9,10 @@ import {
   Palette,
   LayoutGrid,
   Award,
+  ImagePlus,
+  X,
 } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Sheet,
   SheetContent,
@@ -30,10 +33,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import Cropper, { type Area } from "react-easy-crop";
 import { PaywallBadge } from "./PaywallBadge";
 import { ProfileBadgeSlot, type BadgeData } from "./ProfileBadgeSlot";
 import { useGrayscaleMedia } from "@/lib/grayscale-media-context";
+import { getCroppedImageCircular } from "@/lib/crop-image";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 export type ProfileSettings = {
   bannerUrl?: string | null;
@@ -55,6 +68,7 @@ interface ProfileEditSheetProps {
     displayName: string;
     bio?: string | null;
     username: string;
+    avatarUrl?: string | null;
   };
   profileSettings: ProfileSettings | null;
   badges: (BadgeData & { earnedAt?: string })[];
@@ -62,6 +76,7 @@ interface ProfileEditSheetProps {
 }
 
 const SECTION_IDS = ["favorites", "watchlist", "activity"] as const;
+const MAX_AVATAR_SIZE_BYTES = 500 * 1024; // 500KB
 const THEME_OPTIONS = [
   { value: "amber", label: "Amber" },
   { value: "rose", label: "Rose" },
@@ -86,7 +101,15 @@ export function ProfileEditSheet({
   const { isPro } = useSubscription();
   const { grayscaleMedia, setGrayscaleMedia } = useGrayscaleMedia();
 
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [displayName, setDisplayName] = useState(user.displayName);
+  const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl ?? "");
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [imageToCrop, setImageToCrop] = useState<string | null>(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+  const [cropApplying, setCropApplying] = useState(false);
   const [bio, setBio] = useState(user.bio ?? "");
   const [pronouns, setPronouns] = useState(profileSettings?.pronouns ?? "");
   const [bannerUrl, setBannerUrl] = useState(profileSettings?.bannerUrl ?? "");
@@ -99,8 +122,9 @@ export function ProfileEditSheet({
 
   useEffect(() => {
     setDisplayName(user.displayName);
+    setAvatarUrl(user.avatarUrl ?? "");
     setBio(user.bio ?? "");
-  }, [user.displayName, user.bio]);
+  }, [user.displayName, user.avatarUrl, user.bio]);
 
   useEffect(() => {
     setPronouns(profileSettings?.pronouns ?? "");
@@ -112,7 +136,7 @@ export function ProfileEditSheet({
   }, [profileSettings, open]);
 
   const userMutation = useMutation({
-    mutationFn: async (data: { displayName?: string; bio?: string }) => {
+    mutationFn: async (data: { displayName?: string; bio?: string; avatarUrl?: string }) => {
       await apiRequest("PATCH", `/api/users/${user.id}`, data);
     },
     onSuccess: () => {
@@ -139,7 +163,7 @@ export function ProfileEditSheet({
   });
 
   const handleSaveBasics = () => {
-    userMutation.mutate({ displayName, bio });
+    userMutation.mutate({ displayName, bio, avatarUrl: avatarUrl || undefined });
     settingsMutation.mutate({ pronouns: pronouns || null });
   };
 
@@ -167,7 +191,24 @@ export function ProfileEditSheet({
     activity: "Activity",
   };
 
+  const handleCropApply = async () => {
+    if (!imageToCrop) return;
+    const pixels = croppedAreaPixels;
+    if (!pixels) return;
+    setCropApplying(true);
+    try {
+      const dataUrl = await getCroppedImageCircular(imageToCrop, pixels);
+      setAvatarUrl(dataUrl);
+      setImageToCrop(null);
+    } catch (err) {
+      setAvatarError("Failed to crop image.");
+    } finally {
+      setCropApplying(false);
+    }
+  };
+
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="flex flex-col sm:max-w-md" side="right">
         <SheetHeader>
@@ -198,6 +239,92 @@ export function ProfileEditSheet({
 
           <div className="mt-4 flex-1 overflow-y-auto">
             <TabsContent value="basics" className="mt-0 space-y-4">
+              <fieldset
+                className="rounded-lg border border-border bg-card/60 p-4 transition-colors duration-200"
+                aria-labelledby="profile-picture-legend"
+              >
+                <legend
+                  id="profile-picture-legend"
+                  className="mb-3 flex items-center gap-2 text-sm font-medium"
+                >
+                  <ImagePlus className="h-4 w-4 text-muted-foreground" aria-hidden />
+                  Profile picture
+                </legend>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="sr-only"
+                  id="avatar-file"
+                  aria-label="Choose profile picture"
+                  onChange={(e) => {
+                    setAvatarError(null);
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    if (file.size > MAX_AVATAR_SIZE_BYTES) {
+                      setAvatarError("Image must be under 500 KB.");
+                      return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      const dataUrl = reader.result as string;
+                      setImageToCrop(dataUrl);
+                      setCrop({ x: 0, y: 0 });
+                      setZoom(1);
+                      setCroppedAreaPixels(null);
+                    };
+                    reader.onerror = () => setAvatarError("Could not read image.");
+                    reader.readAsDataURL(file);
+                    e.target.value = "";
+                  }}
+                />
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                  <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+                    <Avatar
+                      className="h-20 w-20 shrink-0 ring-2 ring-border transition-shadow duration-200"
+                      aria-label={avatarUrl ? "Current profile photo" : "No profile photo set"}
+                    >
+                      <AvatarImage alt={displayName || "Profile"} src={avatarUrl || undefined} />
+                      <AvatarFallback className="bg-muted text-xl">
+                        {(displayName || "?").slice(0, 1)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex min-h-[44px] flex-col justify-center gap-2">
+                      <Label
+                        htmlFor="avatar-file"
+                        className="cursor-pointer rounded-md border border-input bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      >
+                        Choose image
+                      </Label>
+                      <p id="avatarUrl-hint" className="text-xs text-muted-foreground">
+                        JPG, PNG, WebP or GIF. Max 500 KB.
+                      </p>
+                      {avatarError ? (
+                        <p className="text-xs text-destructive" role="alert">
+                          {avatarError}
+                        </p>
+                      ) : null}
+                      {avatarUrl ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-9 w-fit gap-1.5 text-muted-foreground hover:text-destructive"
+                          onClick={() => {
+                            setAvatarUrl("");
+                            setAvatarError(null);
+                            if (avatarInputRef.current) avatarInputRef.current.value = "";
+                          }}
+                          aria-label="Remove profile picture"
+                        >
+                          <X className="h-3.5 w-3.5" aria-hidden />
+                          Remove photo
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </fieldset>
               <div className="space-y-2">
                 <Label htmlFor="displayName">Display name</Label>
                 <Input
@@ -380,5 +507,52 @@ export function ProfileEditSheet({
         </Tabs>
       </SheetContent>
     </Sheet>
+
+    <Dialog open={!!imageToCrop} onOpenChange={(open) => !open && setImageToCrop(null)}>
+      <DialogContent
+        className="max-w-lg p-0 gap-0 overflow-hidden"
+        aria-describedby="crop-dialog-description"
+      >
+        <DialogHeader className="p-4 pb-0">
+          <DialogTitle>Adjust profile picture</DialogTitle>
+          <DialogDescription id="crop-dialog-description">
+            Drag to position and pinch or scroll to zoom. The circle shows how it will appear.
+          </DialogDescription>
+        </DialogHeader>
+        {imageToCrop ? (
+          <div className="relative h-[min(70vh,400px)] w-full bg-muted">
+            <Cropper
+              image={imageToCrop}
+              crop={crop}
+              zoom={zoom}
+              aspect={1}
+              cropShape="round"
+              showGrid={false}
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onCropComplete={(_area, areaPixels) => setCroppedAreaPixels(areaPixels)}
+              onCropAreaChange={(_area, areaPixels) => setCroppedAreaPixels(areaPixels)}
+            />
+          </div>
+        ) : null}
+        <DialogFooter className="flex-row justify-end gap-2 p-4 pt-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setImageToCrop(null)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            disabled={!croppedAreaPixels || cropApplying}
+            onClick={handleCropApply}
+          >
+            {cropApplying ? "Applying…" : "Apply"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

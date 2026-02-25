@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams } from "wouter";
+import { Link, useParams, useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -10,6 +10,7 @@ import {
   Clapperboard,
   Film,
   Heart,
+  MessageSquare,
   Music,
   Plus,
   Settings2,
@@ -25,6 +26,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
+import { BottomNav } from "@/components/BottomNav";
 import { ProfileBanner } from "@/components/profile/ProfileBanner";
 import { ProfileBadgeSlot, type BadgeData } from "@/components/profile/ProfileBadgeSlot";
 import { ProfileEditSheet } from "@/components/profile/ProfileEditSheet";
@@ -74,6 +76,7 @@ export default function Profile() {
   const handle = params.handle ?? "";
   const queryClient = useQueryClient();
   const { currentUser } = useAuth();
+  const [, navigate] = useLocation();
   const [editOpen, setEditOpen] = useState(false);
 
   const isYou = handle === "you";
@@ -123,6 +126,16 @@ export default function Profile() {
     },
   });
 
+  const messageMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/conversations", { recipientId: userId });
+      return res.json();
+    },
+    onSuccess: (conv) => {
+      navigate(`/messages/${conv.id}`);
+    },
+  });
+
   if (profileLoading) {
     return (
       <div className="min-h-dvh bg-background flex items-center justify-center">
@@ -162,118 +175,144 @@ export default function Profile() {
   if (orderedSections.length === 0) orderedSections.push(...SECTION_IDS);
 
   return (
-    <ProfileThemeProvider
-      themeAccent={settings?.themeAccent}
-      themeCustomColor={settings?.themeCustomColor}
-      className="min-h-dvh bg-background"
-    >
-      <div className="min-h-dvh">
-        <header className="sticky top-0 z-30 border-b bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
-          <div className="mx-auto grid max-w-6xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:flex sm:gap-3">
-            <Button
-              variant="secondary"
-              size="icon"
-              className="h-10 w-10 rounded-md"
-              data-testid="button-back"
-              asChild
-            >
-              <Link href="/" data-testid="link-back-home">
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            </Button>
-
-            <div className="min-w-0">
-              <h1 className="truncate font-serif text-base font-semibold sm:text-lg" data-testid="text-profile-title">
-                {profile.name}
-              </h1>
-              <p className="truncate text-xs text-muted-foreground" data-testid="text-profile-handle">
-                @{profile.handle}
-              </p>
-            </div>
-
-            <div className="flex items-center justify-end gap-2">
-              {isMe ? (
-                <>
-                  <Button
-                    variant="secondary"
-                    size="icon"
-                    className="h-10 w-10 rounded-md sm:hidden"
-                    data-testid="button-settings"
-                    onClick={() => setEditOpen(true)}
-                  >
-                    <Settings2 className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    className="hidden h-10 rounded-md sm:inline-flex"
-                    data-testid="button-edit-profile"
-                    onClick={() => setEditOpen(true)}
-                  >
-                    <Settings2 className="mr-2 h-4 w-4" />
-                    Edit profile
-                  </Button>
-                  <ProfileEditSheet
-                    open={editOpen}
-                    onOpenChange={setEditOpen}
-                    user={{
-                      id: profileUser.id,
-                      displayName: profileUser.displayName,
-                      bio: profileUser.bio,
-                      username: profileUser.username,
-                    }}
-                    profileSettings={settings}
-                    badges={badges}
-                    onSuccess={() => {
-                      queryClient.invalidateQueries({ queryKey: profileQueryKey });
-                    }}
-                  />
-                </>
-              ) : (
+    <>
+      <ProfileThemeProvider
+        themeAccent={settings?.themeAccent}
+        themeCustomColor={settings?.themeCustomColor}
+        className="min-h-dvh bg-background"
+      >
+        <div className="min-h-dvh pb-20">
+        <header className="sticky top-0 z-40 w-full pt-3 pb-2 sm:pt-4 sm:pb-3 px-4 sm:px-6 transition-all duration-300">
+          <div className="absolute inset-x-0 top-0 h-4 bg-background/80 backdrop-blur-xl pointer-events-none" />
+          <div className="relative mx-auto max-w-6xl flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-3 rounded-md border border-border/50 bg-background/60 px-4 py-3 shadow-lg backdrop-blur-xl supports-[backdrop-filter]:bg-background/40">
+              <div className="flex items-center gap-3 min-w-0">
                 <Button
-                  className="h-10 rounded-md"
-                  variant={following ? "secondary" : "default"}
-                  data-testid="button-follow"
-                  onClick={() => followMutation.mutate()}
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 hover:bg-background/80 transition-colors"
+                  data-testid="button-back"
+                  asChild
                 >
-                  <span className="sm:hidden" data-testid="text-follow-compact">
-                    {following ? "Following" : "Follow"}
-                  </span>
-                  <span className="hidden sm:inline" data-testid="text-follow-full">
-                    {following ? (
-                      <>
-                        <Heart className="mr-2 h-4 w-4 text-red-600" />
-                        Following
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Follow
-                      </>
-                    )}
-                  </span>
+                  <Link href="/" data-testid="link-back-home">
+                    <ArrowLeft className="h-5 w-5" />
+                  </Link>
                 </Button>
-              )}
-            </div>
-          </div>
 
-          <div className="mx-auto max-w-6xl px-4 pb-3 sm:hidden">
-            <Tabs defaultValue="overview" className="w-full min-w-0" data-testid="tabs-profile">
-              <TabsList className="w-full rounded-md border bg-card/60 p-1" data-testid="tabs-list-profile">
-                <TabsTrigger value="overview" className="flex-1 rounded-md" data-testid="tab-overview">
-                  Overview
-                </TabsTrigger>
-                <TabsTrigger value="faves" className="flex-1 rounded-md" data-testid="tab-faves">
-                  Favorites
-                </TabsTrigger>
-                <TabsTrigger value="activity" className="flex-1 rounded-md" data-testid="tab-activity">
-                  Activity
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+                <div className="min-w-0">
+                  <h1 className="truncate font-serif text-lg font-semibold tracking-tight" data-testid="text-profile-title">
+                    {profile.name}
+                  </h1>
+                  <p className="truncate text-[13px] font-medium text-muted-foreground" data-testid="text-profile-handle">
+                    @{profile.handle}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 shrink-0">
+                {isMe ? (
+                  <>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="h-9 w-9 shadow-sm sm:hidden"
+                      data-testid="button-settings"
+                      onClick={() => setEditOpen(true)}
+                    >
+                      <Settings2 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      className="hidden h-9 px-4 shadow-sm sm:inline-flex font-semibold text-sm"
+                      data-testid="button-edit-profile"
+                      onClick={() => setEditOpen(true)}
+                    >
+                      <Settings2 className="mr-2 h-4 w-4" />
+                      Edit profile
+                    </Button>
+                    <ProfileEditSheet
+                      open={editOpen}
+                      onOpenChange={setEditOpen}
+                      user={{
+                        id: profileUser.id,
+                        displayName: profileUser.displayName,
+                        bio: profileUser.bio,
+                        username: profileUser.username,
+                      }}
+                      profileSettings={settings}
+                      badges={badges}
+                      onSuccess={() => {
+                        queryClient.invalidateQueries({ queryKey: profileQueryKey });
+                      }}
+                    />
+                  </>
+                ) : (
+                  <div className="flex items-center gap-2">
+                  <Button
+                    skeuo
+                    className={cn(
+                      "h-9 px-4 shadow-sm font-semibold text-sm transition-all",
+                      following 
+                        ? "hover:bg-destructive/10 hover:text-destructive hover:border-destructive/20" 
+                        : "hover:opacity-90"
+                    )}
+                    variant={following ? "secondary" : "default"}
+                    data-testid="button-follow"
+                    onClick={() => followMutation.mutate()}
+                  >
+                      <span className="sm:hidden" data-testid="text-follow-compact">
+                        {following ? "Following" : "Follow"}
+                      </span>
+                      <span className="hidden sm:inline-flex items-center gap-1.5" data-testid="text-follow-full">
+                        {following ? (
+                          <>
+                            <Heart className="h-4 w-4 fill-current" />
+                            Following
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4" strokeWidth={3} />
+                            Follow
+                          </>
+                        )}
+                      </span>
+                    </Button>
+                    {currentUser && (
+                      <Button
+                        variant="outline"
+                        className="h-9 px-4 shadow-sm font-semibold text-sm bg-background/50 hover:bg-accent/80 transition-colors"
+                        data-testid="button-message"
+                        onClick={() => messageMutation.mutate()}
+                        disabled={messageMutation.isPending}
+                      >
+                        <MessageSquare className="h-4 w-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Message</span>
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="sm:hidden">
+              <Tabs defaultValue="overview" className="w-full min-w-0" data-testid="tabs-profile">
+                <TabsList className="w-full rounded-md border border-border/50 bg-background/60 shadow-lg backdrop-blur-xl p-1" data-testid="tabs-list-profile">
+                  <TabsTrigger value="overview" className="flex-1 rounded-sm text-xs font-semibold" data-testid="tab-overview">
+                    Overview
+                  </TabsTrigger>
+                  <TabsTrigger value="faves" className="flex-1 rounded-sm text-xs font-semibold" data-testid="tab-faves">
+                    Favorites
+                  </TabsTrigger>
+                  <TabsTrigger value="activity" className="flex-1 rounded-sm text-xs font-semibold" data-testid="tab-activity">
+                    Activity
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
           </div>
         </header>
 
-        <main className="mx-auto max-w-6xl px-4 pb-24 pt-0">
+        <main className="mx-auto max-w-6xl px-4 pb-12 pt-6">
           {/* Hero: Discord-style banner + overlay */}
           <div className="-mx-4 sm:-mx-6 lg:mx-0 lg:rounded-xl lg:overflow-hidden lg:border lg:border-border">
             <ProfileBanner
@@ -511,24 +550,9 @@ export default function Profile() {
             )}
           </motion.div>
         </main>
-
-        <div className="font-brand fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-            <Link href="/" data-testid="nav-home" className="text-sm font-medium text-muted-foreground hover:text-foreground">
-              Home
-            </Link>
-            <Link href="/discover" data-testid="nav-discover" className="text-sm font-medium text-muted-foreground hover:text-foreground">
-              Discover
-            </Link>
-            <Link href="/watchlist" data-testid="nav-watchlist" className="text-sm font-medium text-muted-foreground hover:text-foreground">
-              Watchlist
-            </Link>
-            <Link href="/u/you" data-testid="nav-profile" className="text-sm font-medium hover:opacity-80">
-              Profile
-            </Link>
-          </div>
         </div>
-      </div>
-    </ProfileThemeProvider>
+      </ProfileThemeProvider>
+      <BottomNav />
+    </>
   );
 }

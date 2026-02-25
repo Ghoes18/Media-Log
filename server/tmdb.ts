@@ -365,9 +365,10 @@ function mapTmdbDetails(data: any, type: "movie" | "tv"): TmdbDetailResult {
     firstAirDate: s.first_air_date,
     voteAverage: s.vote_average ?? 0,
   }));
-  const keywords = (data.keywords?.keywords || data.keywords || []).map((k: any) =>
-    typeof k === "string" ? k : k.name
-  );
+  const rawKeywords = data.keywords?.keywords ?? data.keywords;
+  const keywords = Array.isArray(rawKeywords)
+    ? rawKeywords.map((k: any) => (typeof k === "string" ? k : k?.name ?? ""))
+    : [];
   return {
     externalId: String(data.id),
     type: type === "tv" ? "tv" : "movie",
@@ -457,6 +458,28 @@ export async function getTmdbDetails(tmdbId: string, type: "movie" | "tv"): Prom
     return result;
   } catch (e) {
     console.error("getTmdbDetails error:", e);
+    return null;
+  }
+}
+
+/** Resolve IMDb ID (tt...) to TMDB details for movies. */
+export async function getTmdbDetailsByImdbId(imdbId: string): Promise<TmdbDetailResult | null> {
+  if (!TMDB_API_KEY || !imdbId || !/^tt\d+$/.test(imdbId)) return null;
+  const cacheKey = `details-imdb-${imdbId}`;
+  const cached = getCached<TmdbDetailResult>(cacheKey);
+  if (cached) return cached;
+  try {
+    const data = await tmdbFetch(`/find/${imdbId}?external_source=imdb_id`);
+    const movie = data.movie_results?.[0];
+    if (!movie) return null;
+    const full = await tmdbFetch(
+      `/movie/${movie.id}?append_to_response=credits,videos,alternative_titles,release_dates,similar,keywords`
+    );
+    const result = mapTmdbDetails(full, "movie");
+    setCache(cacheKey, result);
+    return result;
+  } catch (e) {
+    console.error("getTmdbDetailsByImdbId error:", e);
     return null;
   }
 }

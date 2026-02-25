@@ -119,7 +119,7 @@ export default function SignIn() {
                 {error}
               </p>
             )}
-            <Button type="submit" disabled={loading} className="w-full rounded-md">
+            <Button skeuo type="submit" disabled={loading} className="w-full rounded-md">
               {loading ? "Please wait…" : isSignUp ? "Sign up" : "Sign in"}
             </Button>
             <p className="text-center text-sm text-muted-foreground">

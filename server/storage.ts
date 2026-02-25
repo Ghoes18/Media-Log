@@ -1,4 +1,4 @@
-import { eq, and, desc, sql, count } from "drizzle-orm";
+import { eq, and, desc, sql, count, lt, or, ne, isNull } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -14,6 +14,8 @@ import {
   badges,
   userBadges,
   subscriptions,
+  conversations,
+  messages,
   type User,
   type InsertUser,
   type Media,
@@ -22,13 +24,21 @@ import {
   type InsertReview,
   type ProfileSettings,
   type Badge,
+  type Conversation,
+  type Message,
 } from "@shared/schema";
+
+export interface ConversationWithDetails extends Conversation {
+  otherUser: User;
+  lastMessage: { body: string; senderId: string; createdAt: Date } | null;
+  unreadCount: number;
+}
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  updateUser(id: string, data: Partial<Pick<User, "displayName" | "bio">>): Promise<User>;
+  updateUser(id: string, data: Partial<Pick<User, "displayName" | "bio" | "avatarUrl">>): Promise<User>;
 
   getAllMedia(): Promise<Media[]>;
   getMediaById(id: string): Promise<Media | undefined>;
@@ -98,6 +108,18 @@ export interface IStorage {
   getBadges(): Promise<Badge[]>;
   getUserBadges(userId: string): Promise<(Badge & { earnedAt: Date })[]>;
   seedBadgesIfEmpty(): Promise<void>;
+
+  // DM methods
+  getConversationsForUser(userId: string, status?: string): Promise<ConversationWithDetails[]>;
+  getOrCreateConversation(userId: string, recipientId: string): Promise<Conversation>;
+  getConversationById(id: string): Promise<Conversation | undefined>;
+  getMessages(conversationId: string, before?: Date, limit?: number): Promise<(Message & { sender: User })[]>;
+  createMessage(conversationId: string, senderId: string, body: string): Promise<Message>;
+  acceptConversation(conversationId: string, userId: string): Promise<Conversation>;
+  declineConversation(conversationId: string, userId: string): Promise<Conversation>;
+  markMessagesAsRead(conversationId: string, userId: string): Promise<void>;
+  getUnreadCount(userId: string): Promise<number>;
+  getRequestMessageCount(conversationId: string, senderId: string): Promise<number>;
 }
 
 function slugUsername(name: string | undefined | null, email: string | undefined | null): string {
@@ -135,7 +157,7 @@ class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async updateUser(id: string, data: Partial<Pick<User, "displayName" | "bio">>): Promise<User> {
+  async updateUser(id: string, data: Partial<Pick<User, "displayName" | "bio" | "avatarUrl">>): Promise<User> {
     const [user] = await db
       .update(users)
       .set(data)
@@ -635,6 +657,197 @@ class DatabaseStorage implements IStorage {
       .where(eq(userBadges.userId, userId))
       .orderBy(userBadges.earnedAt);
     return rows.map((r) => ({ ...r.badge, earnedAt: r.earnedAt }));
+  }
+
+  async getConversationsForUser(userId: string, status?: string): Promise<ConversationWithDetails[]> {
+    const rows = await db
+      .select({
+        conversation: conversations,
+        participant1: { id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl },
+      })
+      .from(conversations)
+      .innerJoin(users, or(
+        and(eq(conversations.participant1Id, userId), eq(users.id, conversations.participant2Id)),
+        and(eq(conversations.participant2Id, userId), eq(users.id, conversations.participant1Id)),
+      ))
+      .where(
+        and(
+          or(eq(conversations.participant1Id, userId), eq(conversations.participant2Id, userId)),
+          status ? eq(conversations.status, status) : undefined,
+          ne(conversations.status, "declined"),
+        )
+      )
+      .orderBy(desc(conversations.lastMessageAt));
+
+    const results: ConversationWithDetails[] = [];
+    for (const row of rows) {
+      const lastMsg = await db
+        .select({ body: messages.body, senderId: messages.senderId, createdAt: messages.createdAt })
+        .from(messages)
+        .where(eq(messages.conversationId, row.conversation.id))
+        .orderBy(desc(messages.createdAt))
+        .limit(1);
+
+      const unreadResult = await db
+        .select({ count: count() })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.conversationId, row.conversation.id),
+            ne(messages.senderId, userId),
+            isNull(messages.readAt),
+          ),
+        );
+
+      results.push({
+        ...row.conversation,
+        otherUser: row.participant1 as unknown as User,
+        lastMessage: lastMsg[0] ?? null,
+        unreadCount: unreadResult[0]?.count ?? 0,
+      });
+    }
+    return results;
+  }
+
+  async getOrCreateConversation(userId: string, recipientId: string): Promise<Conversation> {
+    const p1 = userId < recipientId ? userId : recipientId;
+    const p2 = userId < recipientId ? recipientId : userId;
+
+    const existing = await db
+      .select()
+      .from(conversations)
+      .where(and(eq(conversations.participant1Id, p1), eq(conversations.participant2Id, p2)))
+      .limit(1);
+
+    if (existing[0]) return existing[0];
+
+    const [ab, ba] = await Promise.all([
+      this.isFollowing(userId, recipientId),
+      this.isFollowing(recipientId, userId),
+    ]);
+    const isMutual = ab && ba;
+    const status = isMutual ? "active" : "request";
+
+    const inserted = await db
+      .insert(conversations)
+      .values({
+        participant1Id: p1,
+        participant2Id: p2,
+        status,
+        requestedById: isMutual ? null : userId,
+      })
+      .returning();
+    return inserted[0];
+  }
+
+  async getConversationById(id: string): Promise<Conversation | undefined> {
+    const rows = await db.select().from(conversations).where(eq(conversations.id, id)).limit(1);
+    return rows[0];
+  }
+
+  async getMessages(conversationId: string, before?: Date, limit = 50): Promise<(Message & { sender: User })[]> {
+    const rows = await db
+      .select({ message: messages, sender: users })
+      .from(messages)
+      .innerJoin(users, eq(messages.senderId, users.id))
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          before ? lt(messages.createdAt, before) : undefined,
+        ),
+      )
+      .orderBy(desc(messages.createdAt))
+      .limit(limit);
+    return rows.map((r) => ({ ...r.message, sender: r.sender })).reverse();
+  }
+
+  async createMessage(conversationId: string, senderId: string, body: string): Promise<Message> {
+    const conv = await this.getConversationById(conversationId);
+    if (!conv) throw new Error("Conversation not found");
+
+    if (conv.status === "request" && conv.requestedById === senderId) {
+      const msgCount = await this.getRequestMessageCount(conversationId, senderId);
+      if (msgCount >= 3) {
+        throw new Error("MESSAGE_LIMIT_REACHED");
+      }
+    }
+
+    const inserted = await db
+      .insert(messages)
+      .values({ conversationId, senderId, body })
+      .returning();
+
+    await db
+      .update(conversations)
+      .set({ lastMessageAt: inserted[0].createdAt })
+      .where(eq(conversations.id, conversationId));
+
+    return inserted[0];
+  }
+
+  async acceptConversation(conversationId: string, userId: string): Promise<Conversation> {
+    const conv = await this.getConversationById(conversationId);
+    if (!conv) throw new Error("Conversation not found");
+    if (conv.requestedById === userId) throw new Error("Cannot accept your own request");
+    if (conv.participant1Id !== userId && conv.participant2Id !== userId) throw new Error("Not a participant");
+
+    const updated = await db
+      .update(conversations)
+      .set({ status: "active" })
+      .where(eq(conversations.id, conversationId))
+      .returning();
+    return updated[0];
+  }
+
+  async declineConversation(conversationId: string, userId: string): Promise<Conversation> {
+    const conv = await this.getConversationById(conversationId);
+    if (!conv) throw new Error("Conversation not found");
+    if (conv.requestedById === userId) throw new Error("Cannot decline your own request");
+    if (conv.participant1Id !== userId && conv.participant2Id !== userId) throw new Error("Not a participant");
+
+    const updated = await db
+      .update(conversations)
+      .set({ status: "declined" })
+      .where(eq(conversations.id, conversationId))
+      .returning();
+    return updated[0];
+  }
+
+  async markMessagesAsRead(conversationId: string, userId: string): Promise<void> {
+    await db
+      .update(messages)
+      .set({ readAt: new Date() })
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          ne(messages.senderId, userId),
+          isNull(messages.readAt),
+        ),
+      );
+  }
+
+  async getUnreadCount(userId: string): Promise<number> {
+    const result = await db
+      .select({ count: count() })
+      .from(messages)
+      .innerJoin(conversations, eq(messages.conversationId, conversations.id))
+      .where(
+        and(
+          or(eq(conversations.participant1Id, userId), eq(conversations.participant2Id, userId)),
+          eq(conversations.status, "active"),
+          ne(messages.senderId, userId),
+          isNull(messages.readAt),
+        ),
+      );
+    return result[0]?.count ?? 0;
+  }
+
+  async getRequestMessageCount(conversationId: string, senderId: string): Promise<number> {
+    const result = await db
+      .select({ count: count() })
+      .from(messages)
+      .where(and(eq(messages.conversationId, conversationId), eq(messages.senderId, senderId)));
+    return result[0]?.count ?? 0;
   }
 
   async seedBadgesIfEmpty(): Promise<void> {

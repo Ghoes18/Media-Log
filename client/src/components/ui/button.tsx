@@ -5,27 +5,26 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium cursor-pointer transition-all duration-200 ease-out hover:scale-[1.01] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground border border-primary-border hover:shadow-[var(--elevate-1)] active:shadow-[var(--elevate-2)]",
+          "bg-primary text-primary-foreground shadow-[0_1px_3px_rgba(0,0,0,0.1),0_1px_2px_rgba(0,0,0,0.06)] hover:shadow-[0_4px_6px_rgba(0,0,0,0.1)] hover:bg-primary/95",
         destructive:
-          "bg-destructive text-destructive-foreground border border-destructive-border shadow-sm hover:shadow-[var(--elevate-1)] active:shadow-[var(--elevate-2)]",
+          "bg-destructive text-destructive-foreground shadow-sm hover:shadow-md hover:bg-destructive/95",
         outline:
-          "border border-input bg-background shadow-xs hover:shadow-[var(--elevate-1)] active:shadow-none [border-color:var(--button-outline)]",
+          "border border-input bg-background/50 shadow-sm hover:bg-accent/80 hover:text-accent-foreground backdrop-blur-sm",
         secondary:
-          "border bg-secondary text-secondary-foreground border-secondary-border hover:shadow-[var(--elevate-1)] active:shadow-[var(--elevate-2)]",
-        ghost: "border border-transparent hover:bg-accent hover:text-accent-foreground",
-        link: "border border-transparent text-primary underline-offset-4 hover:underline",
+          "bg-secondary/80 text-secondary-foreground shadow-sm border border-secondary/20 hover:bg-secondary",
+        ghost: "hover:bg-accent/80 hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        // @replit changed sizes
-        default: "min-h-9 px-4 py-2",
-        sm: "min-h-8 rounded-md px-3 text-xs",
-        lg: "min-h-10 rounded-md px-8",
-        icon: "h-9 w-9",
+        default: "h-10 px-4 py-2",
+        sm: "h-9 rounded-md px-3 text-xs",
+        lg: "h-11 rounded-md px-8",
+        icon: "h-10 w-10",
       },
     },
     defaultVariants: {
@@ -45,13 +44,13 @@ export interface ButtonProps
 
 const skeuoStyles: Record<NonNullable<ButtonProps["variant"]>, string> = {
   default:
-    "btn-skeuo-base shadow-[0_4px_0_hsl(var(--primary-border)),0_5px_10px_rgba(0,0,0,0.3)] active:shadow-[0_1px_0_hsl(var(--primary-border)),0_2px_5px_rgba(0,0,0,0.3)] transition-[transform,box-shadow] duration-150 ease-[cubic-bezier(0.33,1,0.68,1)] active:scale-[0.98] active:translate-y-[1px]",
+    "btn-skeuo-base shadow-[0_0.25em_0_hsl(var(--primary-border)),0_0.3125em_0.625em_rgba(0,0,0,0.3)] active:shadow-[0_0.0625em_0_hsl(var(--primary-border)),0_0.125em_0.3125em_rgba(0,0,0,0.3)] transition-[transform,box-shadow] duration-150 ease-[cubic-bezier(0.33,1,0.68,1)] active:scale-[0.98] active:translate-y-[0.0625em]",
   destructive:
-    "btn-skeuo-base shadow-[0_4px_0_hsl(var(--destructive-border)),0_5px_10px_rgba(0,0,0,0.3)] active:shadow-[0_1px_0_hsl(var(--destructive-border)),0_2px_5px_rgba(0,0,0,0.3)] transition-[transform,box-shadow] duration-150 ease-[cubic-bezier(0.33,1,0.68,1)] active:scale-[0.98] active:translate-y-[1px]",
+    "btn-skeuo-base shadow-[0_0.25em_0_hsl(var(--destructive-border)),0_0.3125em_0.625em_rgba(0,0,0,0.3)] active:shadow-[0_0.0625em_0_hsl(var(--destructive-border)),0_0.125em_0.3125em_rgba(0,0,0,0.3)] transition-[transform,box-shadow] duration-150 ease-[cubic-bezier(0.33,1,0.68,1)] active:scale-[0.98] active:translate-y-[0.0625em]",
   outline:
-    "btn-skeuo-base shadow-[0_4px_0_hsl(var(--border)),0_5px_10px_rgba(0,0,0,0.1)] active:shadow-[0_1px_0_hsl(var(--border)),0_2px_5px_rgba(0,0,0,0.1)] hover:bg-accent hover:text-accent-foreground transition-[transform,box-shadow] duration-150 ease-[cubic-bezier(0.33,1,0.68,1)] active:scale-[0.98] active:translate-y-[1px]",
+    "btn-skeuo-base shadow-[0_0.25em_0_hsl(var(--border)),0_0.3125em_0.625em_rgba(0,0,0,0.1)] active:shadow-[0_0.0625em_0_hsl(var(--border)),0_0.125em_0.3125em_rgba(0,0,0,0.1)] hover:bg-accent hover:text-accent-foreground transition-[transform,box-shadow] duration-150 ease-[cubic-bezier(0.33,1,0.68,1)] active:scale-[0.98] active:translate-y-[0.0625em]",
   secondary:
-    "btn-skeuo-base shadow-[0_4px_0_hsl(var(--secondary-border)),0_5px_10px_rgba(0,0,0,0.1)] active:shadow-[0_1px_0_hsl(var(--secondary-border)),0_2px_5px_rgba(0,0,0,0.1)] border-secondary-border hover:bg-secondary/80 transition-[transform,box-shadow] duration-150 ease-[cubic-bezier(0.33,1,0.68,1)] active:scale-[0.98] active:translate-y-[1px]",
+    "btn-skeuo-base shadow-[0_0.25em_0_hsl(var(--secondary-border)),0_0.3125em_0.625em_rgba(0,0,0,0.1)] active:shadow-[0_0.0625em_0_hsl(var(--secondary-border)),0_0.125em_0.3125em_rgba(0,0,0,0.1)] border-secondary-border hover:bg-secondary/80 transition-[transform,box-shadow] duration-150 ease-[cubic-bezier(0.33,1,0.68,1)] active:scale-[0.98] active:translate-y-[0.0625em]",
   ghost:
     "btn-skeuo-base hover:bg-accent hover:text-accent-foreground transition-[transform,box-shadow] duration-150 ease-[cubic-bezier(0.33,1,0.68,1)] active:scale-[0.98]",
   link:
@@ -75,7 +74,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <Comp className={classes} ref={ref} {...props}>
         {skeuo ? (
           <>
-            <span className="btn-noise absolute inset-0 rounded-md pointer-events-none" aria-hidden="true" />
+            <span className="btn-noise absolute inset-0 rounded-[inherit] pointer-events-none" aria-hidden="true" />
             <span className="relative z-10 flex items-center justify-center gap-2">
               {props.children}
             </span>

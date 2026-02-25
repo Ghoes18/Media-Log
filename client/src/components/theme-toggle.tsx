@@ -17,7 +17,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       type="button"
       variant="secondary"
       size="icon"
-      className={className ?? "rounded-xl"}
+      className={className ?? "rounded-md"}
       onClick={() => setTheme(isDark ? "light" : "dark")}
       data-testid="button-toggle-theme"
       aria-label="Toggle theme"

@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
+import { useSubscription } from "@/lib/use-subscription";
 import { useEnsureMedia } from "@/lib/use-ensure-media";
 import {
   ArrowLeft,
@@ -22,12 +23,15 @@ import {
   Tv2,
 } from "lucide-react";
 
+import { BottomNav } from "@/components/BottomNav";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { StarRatingSelector } from "@/components/star-rating-selector";
+import { AdSlot } from "@/components/ads/AdSlot";
+import { AffiliateLinksCard } from "@/components/ads/AffiliateLinksCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -83,7 +87,109 @@ function Stars({ value }: { value: number }) {
   );
 }
 
+function RatingHistogram({
+  reviews,
+}: {
+  reviews: { rating: number }[];
+}) {
+  const buckets = new Array(10).fill(0) as number[];
+
+  for (const r of reviews) {
+    const val = r.rating;
+    const bucketIdx = Math.max(0, Math.min(9, Math.round(val * 2) - 1));
+    buckets[bucketIdx]++;
+  }
+
+  const totalCount = reviews.length;
+  const maxVal = Math.max(...buckets);
+  const avg = totalCount > 0 ? reviews.reduce((sum, r) => sum + r.rating, 0) / totalCount : 0;
+
+  if (totalCount === 0) return null;
+
+  return (
+    <div className="mt-6 flex flex-col max-w-[320px]">
+      <div className="flex items-center justify-between border-b border-border/40 pb-1.5 mb-3">
+        <span className="text-[11px] font-semibold tracking-widest text-muted-foreground/80 uppercase">Ratings</span>
+        <span className="text-[11px] font-medium tracking-widest text-muted-foreground/80 uppercase">
+          {totalCount.toLocaleString()} {totalCount === 1 ? "Member" : "Members"}
+        </span>
+      </div>
+      
+      <div className="flex items-end gap-5">
+        <div className="flex flex-col flex-1">
+          <div className="flex items-end gap-1 h-12">
+            {buckets.map((val, i) => {
+              const heightPct = maxVal > 0 ? (val / maxVal) * 100 : 0;
+              const starLabel = (i + 1) * 0.5;
+              return (
+                <div
+                  key={i}
+                  className="group relative flex-1 flex flex-col justify-end h-full"
+                >
+                  <div 
+                    className={cn(
+                      "w-full transition-colors duration-200 rounded-sm",
+                      val > 0
+                        ? "bg-slate-500/30 dark:bg-slate-400/30 hover:bg-emerald-500 dark:hover:bg-emerald-400"
+                        : "bg-slate-500/10 dark:bg-slate-400/10"
+                    )}
+                    style={{ height: `${val > 0 ? Math.max(8, heightPct) : 4}%` }}
+                  />
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:flex flex-col items-center z-10">
+                    <div className="bg-popover text-popover-foreground text-[10px] font-medium px-2 py-1 rounded shadow-lg whitespace-nowrap border border-border/50">
+                      <span className="text-emerald-500 dark:text-emerald-400 mr-1">★</span> {starLabel} <span className="text-muted-foreground ml-1">{val.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex items-center justify-between mt-2 text-emerald-500 dark:text-emerald-400">
+            <Star className="h-3 w-3 fill-current" />
+            <div className="h-px flex-1 mx-2 bg-border/40" />
+          </div>
+        </div>
+
+        <div className="flex flex-col items-center justify-end pb-0.5">
+          <span className="font-serif text-3xl font-medium leading-none text-foreground/90 mb-1.5">
+            {avg.toFixed(1)}
+          </span>
+          <div className="flex gap-0.5 text-emerald-500 dark:text-emerald-400">
+            {[...Array(5)].map((_, i) => {
+              const isFull = i + 1 <= Math.floor(avg);
+              const isHalf = !isFull && i < avg;
+              return (
+                <div key={i} className="relative h-3 w-3">
+                  <Star className="absolute inset-0 h-3 w-3 text-emerald-500/20 dark:text-emerald-400/20" strokeWidth={2} />
+                  {isFull && <Star className="absolute inset-0 h-3 w-3 fill-current" strokeWidth={0} />}
+                  {isHalf && (
+                    <div className="absolute inset-0 w-1/2 overflow-hidden">
+                      <Star className="h-3 w-3 min-w-[12px] fill-current" strokeWidth={0} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const TMDB_TYPES = ["movie", "tv", "anime"] as const;
+
+/** IMDb-style logo (black bar + yellow text) for use when showing IMDb classification. */
+function ImdbLogo({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn("inline-flex h-6 items-center gap-0.5 rounded px-1.5 font-bold text-[10px] tracking-tight text-amber-400 bg-black", className)}
+      aria-hidden
+    >
+      <span className="text-[11px] leading-none">IMDb</span>
+    </span>
+  );
+}
 
 export default function MediaDetail() {
   const params = useParams<{ id: string }>();
@@ -93,6 +199,7 @@ export default function MediaDetail() {
   const [draft, setDraft] = useState("");
   const [draftRating, setDraftRating] = useState(0);
   const { currentUser } = useAuth();
+  const { isPro } = useSubscription();
   const { ensureAndNavigate } = useEnsureMedia();
 
   const { data: media, isLoading: mediaLoading } = useQuery<any>({
@@ -471,19 +578,42 @@ export default function MediaDetail() {
                   </span>
                 </div>
 
-                {(ratingNum != null || (mediaType === "book" && richDetails?.rating?.count > 0)) && (
-                  <div className="mt-3 flex items-center gap-2">
-                    <span className="font-serif text-lg font-semibold">
-                      {(ratingNum ?? (mediaType === "book" ? richDetails.rating.average : 0)).toFixed(1)}
-                    </span>
-                    <Stars value={ratingNum ?? (mediaType === "book" ? richDetails.rating.average : 0)} />
-                    {mediaType === "book" && richDetails?.rating?.count > 0 && (
-                      <span className="text-sm text-muted-foreground">
-                        ({richDetails.rating.count} ratings)
-                      </span>
-                    )}
-                  </div>
+                {reviews.length > 0 && (
+                  <RatingHistogram reviews={reviews} />
                 )}
+
+                {isTmdb && richDetails?.imdbId && (() => {
+                  const imdbSourceRating =
+                    richDetails.imdbRating ??
+                    (String(media.externalId) === String(richDetails.imdbId) ? media.rating : null);
+                  const imdbSourceNum = Number.parseFloat(String(imdbSourceRating ?? ""));
+                  const mediaNum = Number.parseFloat(String(media.rating ?? ""));
+                  const tmdbFallbackNum = Number.parseFloat(String(richDetails.voteAverage ?? ""));
+                  const resolvedRating = Number.isFinite(imdbSourceNum)
+                    ? imdbSourceNum
+                    : Number.isFinite(mediaNum)
+                      ? mediaNum
+                      : Number.isFinite(tmdbFallbackNum)
+                        ? tmdbFallbackNum
+                        : null;
+                  const ratingDisplay = resolvedRating != null ? resolvedRating.toFixed(1) : null;
+                  return (
+                    <div className="mt-3 flex items-center gap-2">
+                      <a
+                        href={`https://www.imdb.com/title/${richDetails.imdbId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 rounded border border-transparent transition-colors hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-label={ratingDisplay ? `IMDb rating ${ratingDisplay}` : "View on IMDb"}
+                      >
+                        <ImdbLogo />
+                        <span className="font-serif text-lg font-semibold text-foreground" data-testid="imdb-rating">
+                          {ratingDisplay ?? "—"}
+                        </span>
+                      </a>
+                    </div>
+                  );
+                })()}
               </div>
             </motion.div>
           </div>
@@ -1258,6 +1388,7 @@ export default function MediaDetail() {
                   Tip: mention a scene / line / moment.
                 </div>
                 <Button
+                  skeuo
                   className="rounded-md"
                   data-testid="button-post-quick"
                   disabled={!draft.trim() || draftRating === 0 || !currentUser || postReview.isPending}
@@ -1267,26 +1398,34 @@ export default function MediaDetail() {
                 </Button>
               </div>
             </Card>
+
+            {!isPro && media && (
+              <AffiliateLinksCard
+                media={{
+                  type: media.type,
+                  title: media.title,
+                  creator: media.creator,
+                  externalId: media.externalId,
+                  isbn: richDetails?.editions?.[0]?.isbn ?? undefined,
+                  externalUrl: richDetails?.externalUrl ?? undefined,
+                }}
+              />
+            )}
+
+            {import.meta.env.VITE_AD_SLOT_MEDIADETAIL_RAIL && (
+              <Card className="rounded-lg border border-border bg-card p-4" data-testid="card-ad-media-detail">
+                <AdSlot
+                  slotId={import.meta.env.VITE_AD_SLOT_MEDIADETAIL_RAIL}
+                  format="rectangle"
+                  className="flex justify-center"
+                />
+              </Card>
+            )}
           </aside>
         </div>
       </main>
 
-      <div className="font-brand fixed inset-x-0 bottom-0 z-40 border-t bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/55">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link href="/" data-testid="nav-home" className="text-sm font-medium text-muted-foreground hover:text-foreground">
-            Home
-          </Link>
-          <Link href="/discover" data-testid="nav-discover" className="text-sm font-medium text-muted-foreground hover:text-foreground">
-            Discover
-          </Link>
-          <Link href="/watchlist" data-testid="nav-watchlist" className="text-sm font-medium text-muted-foreground hover:text-foreground">
-            Watchlist
-          </Link>
-          <Link href="/u/you" data-testid="nav-profile" className="text-sm font-medium text-muted-foreground hover:text-foreground">
-            Profile
-          </Link>
-        </div>
-      </div>
+      <BottomNav />
     </div>
   );
 }
@@ -1338,23 +1477,40 @@ function ReviewCard({
                 </Badge>
               </div>
             </div>
-            <Button
-              size="sm"
-              variant={isLiked ? "default" : "secondary"}
-              className="rounded-md"
-              data-testid={`button-like-review-${r.id}`}
+            <motion.button
+              type="button"
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-md px-0 py-1 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+                isLiked ? "text-red-500 dark:text-red-400" : "text-muted-foreground hover:text-foreground",
+              )}
               onClick={handleLikeToggle}
               disabled={!currentUser}
+              data-testid={`button-like-review-${r.id}`}
+              whileTap={{ scale: 0.92 }}
             >
-              <Heart
-                className={cn("mr-2 h-4 w-4", isLiked ? "fill-red-600 text-red-600" : "")}
-                strokeWidth={2}
-              />
-              {isLiked ? "Liked" : "Like"}
-              <span className="ml-2 rounded-full bg-black/5 px-2 py-0.5 text-xs dark:bg-white/10">
+              <motion.span
+                key={isLiked ? "liked" : "unliked"}
+                initial={false}
+                animate={{
+                  scale: isLiked ? [1, 1.4, 1] : 1,
+                }}
+                transition={{
+                  duration: 0.5,
+                  ease: [0.34, 1.56, 0.64, 1],
+                }}
+              >
+                <Heart
+                  className={cn(
+                    "h-4 w-4",
+                    isLiked ? "fill-red-500 text-red-500 dark:fill-red-400 dark:text-red-400" : "",
+                  )}
+                  strokeWidth={2}
+                />
+              </motion.span>
+              <span className="tabular-nums" data-testid={`text-likes-${r.id}`}>
                 {r.likeCount ?? 0}
               </span>
-            </Button>
+            </motion.button>
           </div>
 
           <p className="mt-2 text-sm leading-relaxed text-foreground/90" data-testid={`text-review-${r.id}`}>
