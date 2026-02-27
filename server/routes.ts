@@ -4,12 +4,13 @@ import { storage } from "./storage";
 import { authMiddleware } from "./auth";
 import { pushToUser } from "./ws";
 import { insertReviewSchema } from "@shared/schema";
+import { z } from "zod";
 import { searchSpotifyAlbums, getSpotifyAlbum, getSpotifyAlbumDetails, getSpotifyArtistAlbums } from "./spotify";
 import { searchOpenLibraryBooks, getOpenLibraryBook, getTrendingBooks, getOpenLibraryDetails, getOpenLibraryAuthorWorks } from "./openlibrary";
 import {
   getTrendingMovies, getTrendingTv, getTrendingAnime,
   searchTmdbMovies, searchTmdbTv, searchTmdbAnime,
-  getTmdbDetails, getTmdbDetailsByImdbId, getTmdbPersonCredits,
+  getTmdbDetails, getTmdbDetailsByImdbId, getTmdbPersonCredits, getTmdbSeasonDetails,
 } from "./tmdb";
 import { searchRawgGames, getTrendingGames, getRawgGameDetails, getRawgGamesByDeveloper } from "./rawg";
 import { getImdbRatingByImdbId, getImdbTop250List, pickRandomFromImdbTop250 } from "./imdb";
@@ -256,6 +257,16 @@ export async function registerRoutes(
     res.json(result);
   });
 
+  // GET /api/users/search?q= — must be above /api/users/:id
+  app.get("/api/users/search", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const q = (req.query.q as string)?.trim();
+    if (!q || q.length < 2) return res.json([]);
+    const results = await storage.searchUsers(q, appUser.id);
+    res.json(results);
+  });
+
   app.get("/api/users/:id", async (req, res) => {
     const user = await storage.getUser(req.params.id);
     if (!user) return res.status(404).json({ message: "User not found" });
@@ -453,6 +464,36 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/tmdb/tv/:tmdbId/season/:seasonNumber", async (req, res) => {
+    const seasonNumber = Number.parseInt(req.params.seasonNumber, 10);
+    if (!Number.isInteger(seasonNumber) || seasonNumber < 0) {
+      return res.status(400).json({ message: "seasonNumber must be a non-negative integer" });
+    }
+    try {
+      const details = await getTmdbSeasonDetails(req.params.tmdbId, seasonNumber);
+      if (!details) return res.status(404).json({ message: "Season not found" });
+      res.json(details);
+    } catch (err: any) {
+      console.error("TMDB season details error:", err.message);
+      res.status(500).json({ message: "Failed to fetch TMDB season details" });
+    }
+  });
+
+  app.get("/api/tmdb/tv/:tmdbId/all-seasons", async (req, res) => {
+    try {
+      const details = await getTmdbDetails(req.params.tmdbId, "tv");
+      if (!details) return res.status(404).json({ message: "Show not found" });
+      const seasons = (details.seasons ?? []).filter((s: any) => s.seasonNumber > 0);
+      const allSeasons = await Promise.all(
+        seasons.map((s: any) => getTmdbSeasonDetails(req.params.tmdbId, s.seasonNumber))
+      );
+      res.json(allSeasons.filter(Boolean));
+    } catch (err: any) {
+      console.error("TMDB all-seasons error:", err.message);
+      res.status(500).json({ message: "Failed to fetch all seasons" });
+    }
+  });
+
   app.get("/api/media/:id/stats", async (req, res) => {
     const stats = await storage.getMediaStats(req.params.id);
     res.json(stats);
@@ -465,7 +506,25 @@ export async function registerRoutes(
   });
 
   app.get("/api/media/:id/reviews", async (req, res) => {
-    const result = await storage.getReviewsForMedia(req.params.id);
+    const season = req.query.season as string | undefined;
+    const episode = req.query.episode as string | undefined;
+    const seasonNumber = season != null ? Number.parseInt(season, 10) : undefined;
+    const episodeNumber = episode != null ? Number.parseInt(episode, 10) : undefined;
+
+    if (season != null && !Number.isInteger(seasonNumber)) {
+      return res.status(400).json({ message: "season must be an integer" });
+    }
+    if (episode != null && !Number.isInteger(episodeNumber)) {
+      return res.status(400).json({ message: "episode must be an integer" });
+    }
+    if (episodeNumber != null && seasonNumber == null) {
+      return res.status(400).json({ message: "season is required when episode is provided" });
+    }
+
+    const result = await storage.getReviewsForMedia(req.params.id, {
+      seasonNumber,
+      episodeNumber,
+    });
     res.json(result);
   });
 
@@ -488,12 +547,21 @@ export async function registerRoutes(
 
   app.post("/api/reviews", requireAuth, async (req, res) => {
     const authReq = req as RequestWithAuth;
-    const parsed = insertReviewSchema.safeParse({
+    const reviewSchema = insertReviewSchema.extend({
+      seasonNumber: z.number().int().positive().optional().nullable(),
+      episodeNumber: z.number().int().positive().optional().nullable(),
+    });
+    const parsed = reviewSchema.safeParse({
       ...req.body,
       userId: authReq.authUserId,
     });
     if (!parsed.success) {
       return res.status(400).json({ message: parsed.error.message });
+    }
+    const seasonNumber = parsed.data.seasonNumber ?? undefined;
+    const episodeNumber = parsed.data.episodeNumber ?? undefined;
+    if (episodeNumber != null && seasonNumber == null) {
+      return res.status(400).json({ message: "seasonNumber is required when episodeNumber is provided" });
     }
     const review = await storage.createReview(parsed.data);
     res.status(201).json(review);
@@ -851,6 +919,214 @@ export async function registerRoutes(
     });
 
     res.json({ ok: true });
+  });
+
+  // ── Collaborative Lists ─────────────────────────────────────────────────────
+
+  // GET /api/lists
+  app.get("/api/lists", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const userLists = await storage.getUserLists(appUser.id);
+    res.json(userLists);
+  });
+
+  // POST /api/lists
+  app.post("/api/lists", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const { name, description, visibility } = req.body as { name?: string; description?: string; visibility?: string };
+    if (!name?.trim()) return res.status(400).json({ message: "name is required" });
+    const list = await storage.createList(appUser.id, {
+      name: name.trim().slice(0, 100),
+      description: description?.trim().slice(0, 500) ?? "",
+      visibility: visibility === "public" ? "public" : "private",
+    });
+    res.status(201).json(list);
+  });
+
+  // GET /api/lists/:id
+  app.get("/api/lists/:id", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const list = await storage.getList(req.params.id as string);
+    if (!list) return res.status(404).json({ message: "List not found" });
+
+    const isOwner = list.ownerId === appUser.id;
+    if (!isOwner) {
+      const collabs = await storage.getListCollaborators(list.id);
+      const isCollab = collabs.some((c) => c.userId === appUser.id);
+      if (!isCollab && list.visibility !== "public") {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+    }
+
+    const [items, collaborators, invitations] = await Promise.all([
+      storage.getListItems(list.id),
+      storage.getListCollaborators(list.id),
+      isOwner ? storage.getListInvitations(list.id) : Promise.resolve([]),
+    ]);
+
+    res.json({ ...list, items, collaborators, invitations, isOwner });
+  });
+
+  // PATCH /api/lists/:id
+  app.patch("/api/lists/:id", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const list = await storage.getList(req.params.id as string);
+    if (!list) return res.status(404).json({ message: "List not found" });
+    if (list.ownerId !== appUser.id) return res.status(403).json({ message: "Forbidden" });
+
+    const { name, description, visibility } = req.body as Partial<{ name: string; description: string; visibility: string }>;
+    const data: Partial<{ name: string; description: string; visibility: string }> = {};
+    if (typeof name === "string") data.name = name.trim().slice(0, 100);
+    if (typeof description === "string") data.description = description.trim().slice(0, 500);
+    if (visibility === "public" || visibility === "private") data.visibility = visibility;
+
+    const updated = await storage.updateList(list.id, data);
+    res.json(updated);
+  });
+
+  // DELETE /api/lists/:id
+  app.delete("/api/lists/:id", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const list = await storage.getList(req.params.id as string);
+    if (!list) return res.status(404).json({ message: "List not found" });
+    if (list.ownerId !== appUser.id) return res.status(403).json({ message: "Forbidden" });
+    await storage.deleteList(list.id);
+    res.json({ ok: true });
+  });
+
+  // POST /api/lists/:id/items
+  app.post("/api/lists/:id/items", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const list = await storage.getList(req.params.id as string);
+    if (!list) return res.status(404).json({ message: "List not found" });
+
+    const isOwner = list.ownerId === appUser.id;
+    if (!isOwner) {
+      const collabs = await storage.getListCollaborators(list.id);
+      if (!collabs.some((c) => c.userId === appUser.id)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+    }
+
+    const { mediaId } = req.body as { mediaId?: string };
+    if (!mediaId) return res.status(400).json({ message: "mediaId is required" });
+
+    const item = await storage.addListItem(list.id, mediaId, appUser.id);
+    res.status(201).json(item);
+  });
+
+  // DELETE /api/lists/:id/items/:mediaId
+  app.delete("/api/lists/:id/items/:mediaId", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const list = await storage.getList(req.params.id as string);
+    if (!list) return res.status(404).json({ message: "List not found" });
+
+    const isOwner = list.ownerId === appUser.id;
+    if (!isOwner) {
+      const collabs = await storage.getListCollaborators(list.id);
+      if (!collabs.some((c) => c.userId === appUser.id)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+    }
+
+    await storage.removeListItem(list.id, req.params.mediaId as string);
+    res.json({ ok: true });
+  });
+
+  // POST /api/lists/:id/invitations
+  app.post("/api/lists/:id/invitations", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const list = await storage.getList(req.params.id as string);
+    if (!list) return res.status(404).json({ message: "List not found" });
+    if (list.ownerId !== appUser.id) return res.status(403).json({ message: "Forbidden" });
+
+    const { invitedUserId } = req.body as { invitedUserId?: string };
+    if (!invitedUserId) return res.status(400).json({ message: "invitedUserId is required" });
+    if (invitedUserId === appUser.id) return res.status(400).json({ message: "Cannot invite yourself" });
+
+    const inv = await storage.createInvitation(list.id, invitedUserId, appUser.id);
+
+    pushToUser(invitedUserId, {
+      type: "list_invitation",
+      payload: {
+        invitationId: inv.id,
+        listId: list.id,
+        listName: list.name,
+        invitedByDisplayName: appUser.displayName,
+      },
+    });
+
+    res.status(201).json(inv);
+  });
+
+  // GET /api/lists/:id/invitations
+  app.get("/api/lists/:id/invitations", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const list = await storage.getList(req.params.id as string);
+    if (!list) return res.status(404).json({ message: "List not found" });
+    if (list.ownerId !== appUser.id) return res.status(403).json({ message: "Forbidden" });
+    const invitations = await storage.getListInvitations(list.id);
+    res.json(invitations);
+  });
+
+  // DELETE /api/lists/:id/collaborators/:userId
+  app.delete("/api/lists/:id/collaborators/:userId", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const list = await storage.getList(req.params.id as string);
+    if (!list) return res.status(404).json({ message: "List not found" });
+    if (list.ownerId !== appUser.id) return res.status(403).json({ message: "Forbidden" });
+    await storage.removeListCollaborator(list.id, req.params.userId as string);
+    res.json({ ok: true });
+  });
+
+  // GET /api/invitations
+  app.get("/api/invitations", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const invitations = await storage.getInvitationsForUser(appUser.id);
+    res.json(invitations);
+  });
+
+  // GET /api/invitations/count
+  app.get("/api/invitations/count", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const count = await storage.getPendingInvitationCount(appUser.id);
+    res.json({ count });
+  });
+
+  // PATCH /api/invitations/:id/accept
+  app.patch("/api/invitations/:id/accept", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    try {
+      const inv = await storage.respondToInvitation(req.params.id as string, appUser.id, "accepted");
+      res.json(inv);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  // PATCH /api/invitations/:id/decline
+  app.patch("/api/invitations/:id/decline", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    try {
+      const inv = await storage.respondToInvitation(req.params.id as string, appUser.id, "declined");
+      res.json(inv);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
   });
 
   return httpServer;

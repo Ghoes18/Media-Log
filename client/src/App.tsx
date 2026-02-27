@@ -24,6 +24,9 @@ import Privacy from "./pages/privacy";
 import Cookies from "./pages/cookies";
 import AffiliateDisclosure from "./pages/affiliate-disclosure";
 import Messages from "./pages/messages";
+import EpisodeDetail from "./pages/episode-detail";
+import Lists from "./pages/lists";
+import ListDetail from "./pages/list-detail";
 
 function Router() {
   return (
@@ -35,12 +38,15 @@ function Router() {
       <Route path="/watchlist" component={Watchlist} />
       <Route path="/review/new" component={ReviewCreate} />
       <Route path="/u/:handle" component={Profile} />
+      <Route path="/m/:id/s/:season/e/:episode" component={EpisodeDetail} />
       <Route path="/m/:id" component={MediaDetail} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/cookies" component={Cookies} />
       <Route path="/affiliate-disclosure" component={AffiliateDisclosure} />
       <Route path="/messages" component={Messages} />
       <Route path="/messages/:conversationId" component={Messages} />
+      <Route path="/lists" component={Lists} />
+      <Route path="/lists/:id" component={ListDetail} />
       <Route component={NotFound} />
     </Switch>
   );

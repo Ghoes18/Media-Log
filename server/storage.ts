@@ -1,4 +1,4 @@
-import { eq, and, desc, sql, count, lt, or, ne, isNull } from "drizzle-orm";
+import { eq, and, desc, sql, count, lt, or, ne, isNull, ilike } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -16,6 +16,10 @@ import {
   subscriptions,
   conversations,
   messages,
+  lists,
+  listItems,
+  listCollaborators,
+  listInvitations,
   type User,
   type InsertUser,
   type Media,
@@ -26,12 +30,35 @@ import {
   type Badge,
   type Conversation,
   type Message,
+  type List,
+  type ListItem,
+  type ListCollaborator,
+  type ListInvitation,
 } from "@shared/schema";
 
 export interface ConversationWithDetails extends Conversation {
   otherUser: User;
   lastMessage: { body: string; senderId: string; createdAt: Date } | null;
   unreadCount: number;
+}
+
+type UserStub = Pick<User, "id" | "username" | "displayName" | "avatarUrl">;
+
+export interface ListWithMeta extends List {
+  owner: UserStub;
+  itemCount: number;
+  collaboratorCount: number;
+  isCollaborator: boolean;
+}
+
+export interface ListItemWithDetails extends ListItem {
+  media: Media;
+  addedBy: UserStub;
+}
+
+export interface ListInvitationWithDetails extends ListInvitation {
+  list: Pick<List, "id" | "name">;
+  invitedBy: UserStub;
 }
 
 export interface IStorage {
@@ -46,7 +73,10 @@ export interface IStorage {
   createMedia(m: InsertMedia): Promise<Media>;
   searchMedia(query: string): Promise<Media[]>;
 
-  getReviewsForMedia(mediaId: string): Promise<
+  getReviewsForMedia(
+    mediaId: string,
+    filters?: { seasonNumber?: number; episodeNumber?: number },
+  ): Promise<
     (Review & { user: User; likeCount: number })[]
   >;
   getReviewsByUser(userId: string): Promise<
@@ -100,7 +130,7 @@ export interface IStorage {
   unlikeMedia(userId: string, mediaId: string): Promise<void>;
   hasLikedMedia(userId: string, mediaId: string): Promise<boolean>;
 
-  getMediaStats(mediaId: string): Promise<{ watched: number; likes: number; listed: number }>;
+  getMediaStats(mediaId: string): Promise<{ watched: number; likes: number; listed: number; averageRating: number | null; reviewCount: number }>;
 
   getProfileSettings(userId: string): Promise<ProfileSettings | undefined>;
   updateProfileSettings(userId: string, data: Partial<ProfileSettings>): Promise<ProfileSettings>;
@@ -108,6 +138,32 @@ export interface IStorage {
   getBadges(): Promise<Badge[]>;
   getUserBadges(userId: string): Promise<(Badge & { earnedAt: Date })[]>;
   seedBadgesIfEmpty(): Promise<void>;
+
+  // Lists
+  createList(ownerId: string, data: { name: string; description?: string; visibility?: string }): Promise<List>;
+  getList(id: string): Promise<List | undefined>;
+  getUserLists(userId: string): Promise<ListWithMeta[]>;
+  updateList(id: string, data: Partial<Pick<List, "name" | "description" | "visibility">>): Promise<List>;
+  deleteList(id: string): Promise<void>;
+
+  // List items
+  addListItem(listId: string, mediaId: string, addedByUserId: string): Promise<ListItem>;
+  removeListItem(listId: string, mediaId: string): Promise<void>;
+  getListItems(listId: string): Promise<ListItemWithDetails[]>;
+
+  // Collaborators
+  getListCollaborators(listId: string): Promise<(ListCollaborator & { user: UserStub })[]>;
+  removeListCollaborator(listId: string, userId: string): Promise<void>;
+
+  // Invitations
+  createInvitation(listId: string, invitedUserId: string, invitedByUserId: string): Promise<ListInvitation>;
+  getInvitationsForUser(userId: string): Promise<ListInvitationWithDetails[]>;
+  getListInvitations(listId: string): Promise<(ListInvitation & { invitedUser: UserStub })[]>;
+  respondToInvitation(id: string, userId: string, status: "accepted" | "declined"): Promise<ListInvitation>;
+  getPendingInvitationCount(userId: string): Promise<number>;
+
+  // User search
+  searchUsers(query: string, excludeUserId?: string): Promise<UserStub[]>;
 
   // DM methods
   getConversationsForUser(userId: string, status?: string): Promise<ConversationWithDetails[]>;
@@ -197,7 +253,16 @@ class DatabaseStorage implements IStorage {
 
   async getReviewsForMedia(
     mediaId: string,
+    filters?: { seasonNumber?: number; episodeNumber?: number },
   ): Promise<(Review & { user: User; likeCount: number })[]> {
+    const whereClauses = [eq(reviews.mediaId, mediaId)];
+    if (filters?.seasonNumber != null) {
+      whereClauses.push(eq(reviews.seasonNumber, filters.seasonNumber));
+    }
+    if (filters?.episodeNumber != null) {
+      whereClauses.push(eq(reviews.episodeNumber, filters.episodeNumber));
+    }
+
     const rows = await db
       .select({
         review: reviews,
@@ -207,7 +272,7 @@ class DatabaseStorage implements IStorage {
       .from(reviews)
       .innerJoin(users, eq(reviews.userId, users.id))
       .leftJoin(reviewLikes, eq(reviewLikes.reviewId, reviews.id))
-      .where(eq(reviews.mediaId, mediaId))
+      .where(and(...whereClauses))
       .groupBy(reviews.id, users.id)
       .orderBy(desc(reviews.createdAt));
 
@@ -567,7 +632,7 @@ class DatabaseStorage implements IStorage {
     return !!row;
   }
 
-  async getMediaStats(mediaId: string): Promise<{ watched: number; likes: number; listed: number }> {
+  async getMediaStats(mediaId: string): Promise<{ watched: number; likes: number; listed: number; averageRating: number | null; reviewCount: number }> {
     const [watchedCount] = await db
       .select({ c: count() })
       .from(watched)
@@ -580,10 +645,17 @@ class DatabaseStorage implements IStorage {
       .select({ c: count() })
       .from(watchlist)
       .where(eq(watchlist.mediaId, mediaId));
+    const [reviewStats] = await db
+      .select({ avg: sql<number>`avg(${reviews.rating})`, c: count() })
+      .from(reviews)
+      .where(eq(reviews.mediaId, mediaId));
+    const avg = reviewStats?.avg != null ? Number(reviewStats.avg) : null;
     return {
       watched: watchedCount?.c ?? 0,
       likes: likesCount?.c ?? 0,
       listed: listedCount?.c ?? 0,
+      averageRating: avg != null && Number.isFinite(avg) ? avg : null,
+      reviewCount: reviewStats?.c ?? 0,
     };
   }
 
@@ -848,6 +920,235 @@ class DatabaseStorage implements IStorage {
       .from(messages)
       .where(and(eq(messages.conversationId, conversationId), eq(messages.senderId, senderId)));
     return result[0]?.count ?? 0;
+  }
+
+  async createList(ownerId: string, data: { name: string; description?: string; visibility?: string }): Promise<List> {
+    const [list] = await db.insert(lists).values({
+      ownerId,
+      name: data.name,
+      description: data.description ?? "",
+      visibility: data.visibility ?? "private",
+    }).returning();
+    return list;
+  }
+
+  async getList(id: string): Promise<List | undefined> {
+    const [list] = await db.select().from(lists).where(eq(lists.id, id));
+    return list;
+  }
+
+  async getUserLists(userId: string): Promise<ListWithMeta[]> {
+    // owned lists
+    const ownedRows = await db
+      .select({
+        list: lists,
+        owner: { id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl },
+        itemCount: sql<number>`(select count(*) from list_items where list_items.list_id = ${lists.id})::int`,
+        collaboratorCount: sql<number>`(select count(*) from list_collaborators where list_collaborators.list_id = ${lists.id})::int`,
+      })
+      .from(lists)
+      .innerJoin(users, eq(lists.ownerId, users.id))
+      .where(eq(lists.ownerId, userId))
+      .orderBy(desc(lists.createdAt));
+
+    // collaborated lists
+    const collabRows = await db
+      .select({
+        list: lists,
+        owner: { id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl },
+        itemCount: sql<number>`(select count(*) from list_items where list_items.list_id = ${lists.id})::int`,
+        collaboratorCount: sql<number>`(select count(*) from list_collaborators where list_collaborators.list_id = ${lists.id})::int`,
+      })
+      .from(listCollaborators)
+      .innerJoin(lists, eq(listCollaborators.listId, lists.id))
+      .innerJoin(users, eq(lists.ownerId, users.id))
+      .where(eq(listCollaborators.userId, userId))
+      .orderBy(desc(lists.createdAt));
+
+    const owned = ownedRows.map((r) => ({
+      ...r.list,
+      owner: r.owner as UserStub,
+      itemCount: r.itemCount,
+      collaboratorCount: r.collaboratorCount,
+      isCollaborator: false,
+    }));
+
+    const collab = collabRows.map((r) => ({
+      ...r.list,
+      owner: r.owner as UserStub,
+      itemCount: r.itemCount,
+      collaboratorCount: r.collaboratorCount,
+      isCollaborator: true,
+    }));
+
+    return [...owned, ...collab];
+  }
+
+  async updateList(id: string, data: Partial<Pick<List, "name" | "description" | "visibility">>): Promise<List> {
+    const [updated] = await db.update(lists).set(data).where(eq(lists.id, id)).returning();
+    if (!updated) throw new Error("List not found");
+    return updated;
+  }
+
+  async deleteList(id: string): Promise<void> {
+    await db.delete(lists).where(eq(lists.id, id));
+  }
+
+  async addListItem(listId: string, mediaId: string, addedByUserId: string): Promise<ListItem> {
+    const existing = await db
+      .select()
+      .from(listItems)
+      .where(and(eq(listItems.listId, listId), eq(listItems.mediaId, mediaId)));
+    if (existing[0]) return existing[0];
+    const [item] = await db.insert(listItems).values({ listId, mediaId, addedByUserId }).returning();
+    return item;
+  }
+
+  async removeListItem(listId: string, mediaId: string): Promise<void> {
+    await db.delete(listItems).where(and(eq(listItems.listId, listId), eq(listItems.mediaId, mediaId)));
+  }
+
+  async getListItems(listId: string): Promise<ListItemWithDetails[]> {
+    const rows = await db
+      .select({
+        item: listItems,
+        media: media,
+        addedBy: { id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl },
+      })
+      .from(listItems)
+      .innerJoin(media, eq(listItems.mediaId, media.id))
+      .innerJoin(users, eq(listItems.addedByUserId, users.id))
+      .where(eq(listItems.listId, listId))
+      .orderBy(desc(listItems.addedAt));
+
+    return rows.map((r) => ({
+      ...r.item,
+      media: r.media,
+      addedBy: r.addedBy as UserStub,
+    }));
+  }
+
+  async getListCollaborators(listId: string): Promise<(ListCollaborator & { user: UserStub })[]> {
+    const rows = await db
+      .select({
+        collab: listCollaborators,
+        user: { id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl },
+      })
+      .from(listCollaborators)
+      .innerJoin(users, eq(listCollaborators.userId, users.id))
+      .where(eq(listCollaborators.listId, listId));
+
+    return rows.map((r) => ({ ...r.collab, user: r.user as UserStub }));
+  }
+
+  async removeListCollaborator(listId: string, userId: string): Promise<void> {
+    await db.delete(listCollaborators).where(
+      and(eq(listCollaborators.listId, listId), eq(listCollaborators.userId, userId))
+    );
+  }
+
+  async createInvitation(listId: string, invitedUserId: string, invitedByUserId: string): Promise<ListInvitation> {
+    // idempotent: return existing pending invitation if present
+    const existing = await db
+      .select()
+      .from(listInvitations)
+      .where(and(
+        eq(listInvitations.listId, listId),
+        eq(listInvitations.invitedUserId, invitedUserId),
+        eq(listInvitations.status, "pending"),
+      ));
+    if (existing[0]) return existing[0];
+    const [inv] = await db.insert(listInvitations).values({ listId, invitedUserId, invitedByUserId }).returning();
+    return inv;
+  }
+
+  async getInvitationsForUser(userId: string): Promise<ListInvitationWithDetails[]> {
+    const rows = await db
+      .select({
+        invitation: listInvitations,
+        list: { id: lists.id, name: lists.name },
+        invitedBy: { id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl },
+      })
+      .from(listInvitations)
+      .innerJoin(lists, eq(listInvitations.listId, lists.id))
+      .innerJoin(users, eq(listInvitations.invitedByUserId, users.id))
+      .where(and(
+        eq(listInvitations.invitedUserId, userId),
+        eq(listInvitations.status, "pending"),
+      ))
+      .orderBy(desc(listInvitations.createdAt));
+
+    return rows.map((r) => ({
+      ...r.invitation,
+      list: r.list,
+      invitedBy: r.invitedBy as UserStub,
+    }));
+  }
+
+  async getListInvitations(listId: string): Promise<(ListInvitation & { invitedUser: UserStub })[]> {
+    const rows = await db
+      .select({
+        invitation: listInvitations,
+        invitedUser: { id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl },
+      })
+      .from(listInvitations)
+      .innerJoin(users, eq(listInvitations.invitedUserId, users.id))
+      .where(eq(listInvitations.listId, listId))
+      .orderBy(desc(listInvitations.createdAt));
+
+    return rows.map((r) => ({ ...r.invitation, invitedUser: r.invitedUser as UserStub }));
+  }
+
+  async respondToInvitation(id: string, userId: string, status: "accepted" | "declined"): Promise<ListInvitation> {
+    const [inv] = await db
+      .select()
+      .from(listInvitations)
+      .where(and(eq(listInvitations.id, id), eq(listInvitations.invitedUserId, userId)));
+    if (!inv) throw new Error("Invitation not found");
+
+    const [updated] = await db
+      .update(listInvitations)
+      .set({ status })
+      .where(eq(listInvitations.id, id))
+      .returning();
+
+    if (status === "accepted") {
+      await db
+        .insert(listCollaborators)
+        .values({ listId: inv.listId, userId })
+        .onConflictDoNothing();
+    }
+
+    return updated;
+  }
+
+  async getPendingInvitationCount(userId: string): Promise<number> {
+    const [row] = await db
+      .select({ c: count() })
+      .from(listInvitations)
+      .where(and(
+        eq(listInvitations.invitedUserId, userId),
+        eq(listInvitations.status, "pending"),
+      ));
+    return row?.c ?? 0;
+  }
+
+  async searchUsers(query: string, excludeUserId?: string): Promise<UserStub[]> {
+    const pattern = `%${query}%`;
+    const rows = await db
+      .select({
+        id: users.id,
+        username: users.username,
+        displayName: users.displayName,
+        avatarUrl: users.avatarUrl,
+      })
+      .from(users)
+      .where(and(
+        or(ilike(users.username, pattern), ilike(users.displayName, pattern)),
+        excludeUserId ? ne(users.id, excludeUserId) : undefined,
+      ))
+      .limit(10);
+    return rows;
   }
 
   async seedBadgesIfEmpty(): Promise<void> {

@@ -19,6 +19,17 @@ export function BottomNav() {
   });
   const unreadCount = unreadData?.count ?? 0;
 
+  const { data: invitationData } = useQuery<{ count: number }>({
+    queryKey: ["/api/invitations/count"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/invitations/count");
+      return res.json();
+    },
+    enabled: !!currentUser,
+    refetchInterval: false,
+  });
+  const invitationCount = invitationData?.count ?? 0;
+
   const linkClass = (href: string) =>
     cn(
       "text-sm font-medium transition-colors hover:text-foreground",
@@ -47,8 +58,20 @@ export function BottomNav() {
         <Link href="/discover" data-testid="nav-discover" className={cn("flex min-w-0 justify-center", linkClass("/discover"))}>
           Discover
         </Link>
-        <Link href="/pick" data-testid="nav-pick" className={cn("flex min-w-0 justify-center", linkClass("/pick"))}>
-          Pick
+        <Link
+          href="/lists"
+          data-testid="nav-lists"
+          className={cn(
+            "relative flex min-w-0 items-center justify-center gap-1 overflow-visible text-sm font-medium transition-colors hover:text-foreground",
+            active("/lists") ? "text-foreground" : "text-muted-foreground"
+          )}
+        >
+          <span className="truncate">Lists</span>
+          {invitationCount > 0 && (
+            <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
+              {invitationCount > 99 ? "99+" : invitationCount}
+            </span>
+          )}
         </Link>
         <Link href="/watchlist" data-testid="nav-watchlist" className={cn("flex min-w-0 justify-center", linkClass("/watchlist"))}>
           Watchlist

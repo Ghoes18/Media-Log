@@ -11,7 +11,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { authClient } from "./auth";
 
-type WsEventType = "new_message" | "messages_read" | "conversation_updated";
+type WsEventType = "new_message" | "messages_read" | "conversation_updated" | "list_invitation";
 
 interface WsEvent {
   type: WsEventType;
@@ -105,6 +105,9 @@ export function WebSocketProvider({ children }: Readonly<{ children: ReactNode }
               queryKey: [`/api/conversations/${convId}/messages`],
             });
           }
+        } else if (event.type === "list_invitation") {
+          queryClient.invalidateQueries({ queryKey: ["/api/invitations/count"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/invitations"] });
         }
       } catch {
         // ignore malformed messages

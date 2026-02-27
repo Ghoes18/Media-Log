@@ -51,6 +51,8 @@ export const reviews = pgTable("reviews", {
   mediaId: varchar("media_id", { length: 36 })
     .notNull()
     .references(() => media.id),
+  seasonNumber: integer("season_number"),
+  episodeNumber: integer("episode_number"),
   rating: real("rating").notNull(),
   body: text("body").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -230,6 +232,38 @@ export const messages = pgTable("messages", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const lists = pgTable("lists", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  ownerId: varchar("owner_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description").default(""),
+  visibility: text("visibility").notNull().default("private"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const listItems = pgTable("list_items", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  listId: varchar("list_id", { length: 36 }).notNull().references(() => lists.id, { onDelete: "cascade" }),
+  mediaId: varchar("media_id", { length: 36 }).notNull().references(() => media.id, { onDelete: "cascade" }),
+  addedByUserId: varchar("added_by_user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  addedAt: timestamp("added_at").defaultNow().notNull(),
+}, (t) => [unique("list_items_list_media_unique").on(t.listId, t.mediaId)]);
+
+export const listCollaborators = pgTable("list_collaborators", {
+  listId: varchar("list_id", { length: 36 }).notNull().references(() => lists.id, { onDelete: "cascade" }),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+}, (t) => [primaryKey({ columns: [t.listId, t.userId] })]);
+
+export const listInvitations = pgTable("list_invitations", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  listId: varchar("list_id", { length: 36 }).notNull().references(() => lists.id, { onDelete: "cascade" }),
+  invitedUserId: varchar("invited_user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  invitedByUserId: varchar("invited_by_user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
@@ -263,3 +297,15 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
 });
 export type InsertConversation = z.infer<typeof insertConversationSchema>;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
+
+export const insertListSchema = createInsertSchema(lists).omit({ id: true, createdAt: true });
+export const insertListItemSchema = createInsertSchema(listItems).omit({ id: true, addedAt: true });
+export const insertListInvitationSchema = createInsertSchema(listInvitations).omit({ id: true, createdAt: true });
+
+export type List = typeof lists.$inferSelect;
+export type ListItem = typeof listItems.$inferSelect;
+export type ListCollaborator = typeof listCollaborators.$inferSelect;
+export type ListInvitation = typeof listInvitations.$inferSelect;
+export type InsertList = z.infer<typeof insertListSchema>;
+export type InsertListItem = z.infer<typeof insertListItemSchema>;
+export type InsertListInvitation = z.infer<typeof insertListInvitationSchema>;

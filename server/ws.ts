@@ -5,7 +5,8 @@ import { verifyNeonToken } from "./auth";
 type WsEvent =
   | { type: "new_message"; payload: Record<string, unknown> }
   | { type: "messages_read"; payload: { conversationId: string; readAt: string } }
-  | { type: "conversation_updated"; payload: Record<string, unknown> };
+  | { type: "conversation_updated"; payload: Record<string, unknown> }
+  | { type: "list_invitation"; payload: { invitationId: string; listId: string; listName: string; invitedByDisplayName: string } };
 
 // In-memory registry: userId -> Set of open WebSocket connections
 const registry = new Map<string, Set<WebSocket>>();

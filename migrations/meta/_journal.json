@@ -15,6 +15,20 @@
       "when": 1772044039066,
       "tag": "0001_brainy_betty_ross",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1772124219695,
+      "tag": "0002_awesome_blink",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1740614400000,
+      "tag": "0003_collab_lists",
+      "breakpoints": true
     }
   ]
 }
