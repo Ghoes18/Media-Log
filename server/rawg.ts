@@ -50,9 +50,9 @@ function mapGameResult(item: any): RawgResult {
   };
 }
 
-export async function getTrendingGames(limit = 10): Promise<RawgResult[]> {
+export async function getTrendingGames(limit = 10, page = 0): Promise<RawgResult[]> {
   if (!RAWG_API_KEY) return [];
-  const cacheKey = "trending-game";
+  const cacheKey = `trending-game-${page}`;
   const cached = getCached<RawgResult[]>(cacheKey);
   if (cached) return cached.slice(0, limit);
   try {
@@ -60,13 +60,32 @@ export async function getTrendingGames(limit = 10): Promise<RawgResult[]> {
     const yearStart = `${now.getFullYear()}-01-01`;
     const today = now.toISOString().slice(0, 10);
     const data = await rawgFetch(
-      `/games?ordering=-added&dates=${yearStart},${today}&page_size=20`,
+      `/games?ordering=-added&dates=${yearStart},${today}&page_size=${Math.min(limit, 40)}&page=${page + 1}`,
     );
     const results = (data.results || []).map(mapGameResult);
     setCache(cacheKey, results);
     return results.slice(0, limit);
   } catch (e) {
     console.error("getTrendingGames error:", e);
+    return [];
+  }
+}
+
+/** Paginated list of popular games (full catalog by popularity, not just recently added). */
+export async function getDiscoverGames(limit = 10, page = 0): Promise<RawgResult[]> {
+  if (!RAWG_API_KEY) return [];
+  const cacheKey = `discover-game-${page}`;
+  const cached = getCached<RawgResult[]>(cacheKey);
+  if (cached) return cached.slice(0, limit);
+  try {
+    const data = await rawgFetch(
+      `/games?ordering=-metacritic&page_size=${Math.min(limit, 40)}&page=${page + 1}`,
+    );
+    const results = (data.results || []).map(mapGameResult);
+    setCache(cacheKey, results);
+    return results.slice(0, limit);
+  } catch (e) {
+    console.error("getDiscoverGames error:", e);
     return [];
   }
 }
@@ -92,14 +111,15 @@ export async function getRawgGamesByDeveloper(developerId: string, limit = 24): 
 export async function searchRawgGames(
   query: string,
   limit = 10,
+  page = 0,
 ): Promise<RawgResult[]> {
   if (!RAWG_API_KEY || !query) return [];
-  const cacheKey = `search-game-${query.toLowerCase().trim()}`;
+  const cacheKey = `search-game-${query.toLowerCase().trim()}-${page}`;
   const cached = getCached<RawgResult[]>(cacheKey);
   if (cached) return cached.slice(0, limit);
   try {
     const data = await rawgFetch(
-      `/games?search=${encodeURIComponent(query)}&page_size=20`,
+      `/games?search=${encodeURIComponent(query)}&page_size=${Math.min(limit, 40)}&page=${page + 1}`,
     );
     const results = (data.results || []).map(mapGameResult);
     setCache(cacheKey, results);

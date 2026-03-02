@@ -1,4 +1,4 @@
-import { eq, and, desc, sql, count, lt, or, ne, isNull, ilike } from "drizzle-orm";
+import { eq, and, desc, asc, sql, count, lt, or, ne, isNull, ilike, inArray } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -20,6 +20,8 @@ import {
   listItems,
   listCollaborators,
   listInvitations,
+  listLikes,
+  listComments,
   type User,
   type InsertUser,
   type Media,
@@ -34,6 +36,7 @@ import {
   type ListItem,
   type ListCollaborator,
   type ListInvitation,
+  type ListComment,
 } from "@shared/schema";
 
 export interface ConversationWithDetails extends Conversation {
@@ -49,6 +52,9 @@ export interface ListWithMeta extends List {
   itemCount: number;
   collaboratorCount: number;
   isCollaborator: boolean;
+  likeCount?: number;
+  commentCount?: number;
+  coverUrls?: string[];
 }
 
 export interface ListItemWithDetails extends ListItem {
@@ -140,16 +146,33 @@ export interface IStorage {
   seedBadgesIfEmpty(): Promise<void>;
 
   // Lists
-  createList(ownerId: string, data: { name: string; description?: string; visibility?: string }): Promise<List>;
+  createList(ownerId: string, data: { name: string; description?: string; visibility?: string; isRanked?: boolean; tags?: string[] }): Promise<List>;
   getList(id: string): Promise<List | undefined>;
   getUserLists(userId: string): Promise<ListWithMeta[]>;
-  updateList(id: string, data: Partial<Pick<List, "name" | "description" | "visibility">>): Promise<List>;
+  updateList(id: string, data: Partial<Pick<List, "name" | "description" | "visibility" | "isRanked" | "tags">>): Promise<List>;
   deleteList(id: string): Promise<void>;
 
   // List items
-  addListItem(listId: string, mediaId: string, addedByUserId: string): Promise<ListItem>;
+  addListItem(listId: string, mediaId: string, addedByUserId: string, note?: string): Promise<ListItem>;
   removeListItem(listId: string, mediaId: string): Promise<void>;
+  reorderListItems(listId: string, itemIds: string[]): Promise<void>;
+  updateListItemNote(listId: string, mediaId: string, note: string | null): Promise<void>;
   getListItems(listId: string): Promise<ListItemWithDetails[]>;
+
+  // List likes
+  likeList(userId: string, listId: string): Promise<void>;
+  unlikeList(userId: string, listId: string): Promise<void>;
+  hasLikedList(userId: string, listId: string): Promise<boolean>;
+  getListLikeCount(listId: string): Promise<number>;
+
+  // List comments
+  getListComments(listId: string): Promise<(ListComment & { user: UserStub })[]>;
+  createListComment(listId: string, userId: string, body: string): Promise<ListComment>;
+  deleteListComment(commentId: string, userId: string): Promise<void>;
+  getListCommentCount(listId: string): Promise<number>;
+
+  // Public lists
+  getPublicLists(options: { sort?: "popular" | "recent"; page?: number; limit?: number }): Promise<ListWithMeta[]>;
 
   // Collaborators
   getListCollaborators(listId: string): Promise<(ListCollaborator & { user: UserStub })[]>;
@@ -922,12 +945,14 @@ class DatabaseStorage implements IStorage {
     return result[0]?.count ?? 0;
   }
 
-  async createList(ownerId: string, data: { name: string; description?: string; visibility?: string }): Promise<List> {
+  async createList(ownerId: string, data: { name: string; description?: string; visibility?: string; isRanked?: boolean; tags?: string[] }): Promise<List> {
     const [list] = await db.insert(lists).values({
       ownerId,
       name: data.name,
       description: data.description ?? "",
       visibility: data.visibility ?? "private",
+      isRanked: data.isRanked ?? false,
+      tags: data.tags ?? [],
     }).returning();
     return list;
   }
@@ -938,6 +963,9 @@ class DatabaseStorage implements IStorage {
   }
 
   async getUserLists(userId: string): Promise<ListWithMeta[]> {
+    const allLists: ListWithMeta[] = [];
+    const listIds: string[] = [];
+
     // owned lists
     const ownedRows = await db
       .select({
@@ -965,26 +993,44 @@ class DatabaseStorage implements IStorage {
       .where(eq(listCollaborators.userId, userId))
       .orderBy(desc(lists.createdAt));
 
-    const owned = ownedRows.map((r) => ({
-      ...r.list,
-      owner: r.owner as UserStub,
-      itemCount: r.itemCount,
-      collaboratorCount: r.collaboratorCount,
-      isCollaborator: false,
-    }));
+    for (const r of ownedRows) {
+      allLists.push({
+        ...r.list,
+        owner: r.owner as UserStub,
+        itemCount: r.itemCount,
+        collaboratorCount: r.collaboratorCount,
+        isCollaborator: false,
+      });
+      listIds.push(r.list.id);
+    }
+    for (const r of collabRows) {
+      if (!listIds.includes(r.list.id)) {
+        allLists.push({
+          ...r.list,
+          owner: r.owner as UserStub,
+          itemCount: r.itemCount,
+          collaboratorCount: r.collaboratorCount,
+          isCollaborator: true,
+        });
+        listIds.push(r.list.id);
+      }
+    }
 
-    const collab = collabRows.map((r) => ({
-      ...r.list,
-      owner: r.owner as UserStub,
-      itemCount: r.itemCount,
-      collaboratorCount: r.collaboratorCount,
-      isCollaborator: true,
-    }));
+    if (listIds.length === 0) return allLists;
 
-    return [...owned, ...collab];
+    const likeCounts = await Promise.all(listIds.map((lid) => this.getListLikeCount(lid)));
+    const commentCounts = await Promise.all(listIds.map((lid) => this.getListCommentCount(lid)));
+    const coverUrlsByList = await this.getListCoverUrls(listIds);
+
+    return allLists.map((l, i) => ({
+      ...l,
+      likeCount: likeCounts[i],
+      commentCount: commentCounts[i],
+      coverUrls: coverUrlsByList[l.id] ?? [],
+    }));
   }
 
-  async updateList(id: string, data: Partial<Pick<List, "name" | "description" | "visibility">>): Promise<List> {
+  async updateList(id: string, data: Partial<Pick<List, "name" | "description" | "visibility" | "isRanked" | "tags">>): Promise<List> {
     const [updated] = await db.update(lists).set(data).where(eq(lists.id, id)).returning();
     if (!updated) throw new Error("List not found");
     return updated;
@@ -994,18 +1040,177 @@ class DatabaseStorage implements IStorage {
     await db.delete(lists).where(eq(lists.id, id));
   }
 
-  async addListItem(listId: string, mediaId: string, addedByUserId: string): Promise<ListItem> {
+  async addListItem(listId: string, mediaId: string, addedByUserId: string, note?: string): Promise<ListItem> {
     const existing = await db
       .select()
       .from(listItems)
       .where(and(eq(listItems.listId, listId), eq(listItems.mediaId, mediaId)));
     if (existing[0]) return existing[0];
-    const [item] = await db.insert(listItems).values({ listId, mediaId, addedByUserId }).returning();
+    const [maxPos] = await db
+      .select({ max: sql<number>`coalesce(max(${listItems.position}), -1)` })
+      .from(listItems)
+      .where(eq(listItems.listId, listId));
+    const nextPosition = (maxPos?.max ?? -1) + 1;
+    const [item] = await db.insert(listItems).values({
+      listId,
+      mediaId,
+      addedByUserId,
+      position: nextPosition,
+      note: note ?? null,
+    }).returning();
     return item;
   }
 
   async removeListItem(listId: string, mediaId: string): Promise<void> {
     await db.delete(listItems).where(and(eq(listItems.listId, listId), eq(listItems.mediaId, mediaId)));
+  }
+
+  async reorderListItems(listId: string, itemIds: string[]): Promise<void> {
+    for (let i = 0; i < itemIds.length; i++) {
+      const mediaId = itemIds[i];
+      await db
+        .update(listItems)
+        .set({ position: i })
+        .where(and(eq(listItems.listId, listId), eq(listItems.mediaId, mediaId)));
+    }
+  }
+
+  async updateListItemNote(listId: string, mediaId: string, note: string | null): Promise<void> {
+    await db
+      .update(listItems)
+      .set({ note })
+      .where(and(eq(listItems.listId, listId), eq(listItems.mediaId, mediaId)));
+  }
+
+  private async getListCoverUrls(listIds: string[]): Promise<Record<string, string[]>> {
+    if (listIds.length === 0) return {};
+    const rows = await db
+      .select({
+        listId: listItems.listId,
+        coverUrl: media.coverUrl,
+        position: listItems.position,
+      })
+      .from(listItems)
+      .innerJoin(media, eq(listItems.mediaId, media.id))
+      .where(inArray(listItems.listId, listIds))
+      .orderBy(asc(listItems.position));
+    const result: Record<string, string[]> = {};
+    for (const r of rows) {
+      if (!result[r.listId]) result[r.listId] = [];
+      if (result[r.listId].length < 5 && r.coverUrl) result[r.listId].push(r.coverUrl);
+    }
+    return result;
+  }
+
+  async likeList(userId: string, listId: string): Promise<void> {
+    await db.insert(listLikes).values({ userId, listId }).onConflictDoNothing();
+  }
+
+  async unlikeList(userId: string, listId: string): Promise<void> {
+    await db.delete(listLikes).where(and(eq(listLikes.userId, userId), eq(listLikes.listId, listId)));
+  }
+
+  async hasLikedList(userId: string, listId: string): Promise<boolean> {
+    const [row] = await db
+      .select()
+      .from(listLikes)
+      .where(and(eq(listLikes.userId, userId), eq(listLikes.listId, listId)));
+    return !!row;
+  }
+
+  async getListLikeCount(listId: string): Promise<number> {
+    const [row] = await db
+      .select({ count: count() })
+      .from(listLikes)
+      .where(eq(listLikes.listId, listId));
+    return row?.count ?? 0;
+  }
+
+  async getListComments(listId: string): Promise<(ListComment & { user: UserStub })[]> {
+    const rows = await db
+      .select({
+        comment: listComments,
+        user: { id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl },
+      })
+      .from(listComments)
+      .innerJoin(users, eq(listComments.userId, users.id))
+      .where(eq(listComments.listId, listId))
+      .orderBy(asc(listComments.createdAt));
+    return rows.map((r) => ({ ...r.comment, user: r.user as UserStub }));
+  }
+
+  async createListComment(listId: string, userId: string, body: string): Promise<ListComment> {
+    const [comment] = await db.insert(listComments).values({ listId, userId, body }).returning();
+    return comment;
+  }
+
+  async deleteListComment(commentId: string, userId: string): Promise<void> {
+    const [comment] = await db.select().from(listComments).where(eq(listComments.id, commentId));
+    if (!comment) throw new Error("Comment not found");
+    if (comment.userId !== userId) throw new Error("Forbidden");
+    await db.delete(listComments).where(eq(listComments.id, commentId));
+  }
+
+  async getListCommentCount(listId: string): Promise<number> {
+    const [row] = await db
+      .select({ count: count() })
+      .from(listComments)
+      .where(eq(listComments.listId, listId));
+    return row?.count ?? 0;
+  }
+
+  async getPublicLists(options: { sort?: "popular" | "recent"; page?: number; limit?: number }): Promise<ListWithMeta[]> {
+    const page = options.page ?? 0;
+    const limit = Math.min(options.limit ?? 24, 50);
+    const offset = page * limit;
+    const sortMode = options.sort ?? "recent";
+
+    const selectFields = {
+      list: lists,
+      owner: { id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl },
+      itemCount: sql<number>`(select count(*) from list_items where list_items.list_id = ${lists.id})::int`,
+      collaboratorCount: sql<number>`(select count(*) from list_collaborators where list_collaborators.list_id = ${lists.id})::int`,
+      likeCount: sql<number>`(select count(*) from list_likes where list_likes.list_id = ${lists.id})::int`,
+    };
+
+    const rows = sortMode === "popular"
+      ? await db
+          .select(selectFields)
+          .from(lists)
+          .innerJoin(users, eq(lists.ownerId, users.id))
+          .where(eq(lists.visibility, "public"))
+          .orderBy(desc(sql`(select count(*) from list_likes where list_likes.list_id = lists.id)`), desc(lists.createdAt))
+          .limit(limit)
+          .offset(offset)
+      : await db
+          .select(selectFields)
+          .from(lists)
+          .innerJoin(users, eq(lists.ownerId, users.id))
+          .where(eq(lists.visibility, "public"))
+          .orderBy(desc(lists.createdAt))
+          .limit(limit)
+          .offset(offset);
+
+    const result: ListWithMeta[] = rows.map((r) => ({
+      ...r.list,
+      owner: r.owner as UserStub,
+      itemCount: r.itemCount,
+      collaboratorCount: r.collaboratorCount,
+      isCollaborator: false,
+    }));
+
+    const listIds = result.map((l) => l.id);
+    if (listIds.length === 0) return result;
+
+    const commentCounts = await Promise.all(listIds.map((lid) => this.getListCommentCount(lid)));
+    const coverUrlsByList = await this.getListCoverUrls(listIds);
+
+    return result.map((l, i) => ({
+      ...l,
+      likeCount: (rows[i] as { likeCount?: number }).likeCount ?? 0,
+      commentCount: commentCounts[i],
+      coverUrls: coverUrlsByList[l.id] ?? [],
+    }));
   }
 
   async getListItems(listId: string): Promise<ListItemWithDetails[]> {
@@ -1019,7 +1224,7 @@ class DatabaseStorage implements IStorage {
       .innerJoin(media, eq(listItems.mediaId, media.id))
       .innerJoin(users, eq(listItems.addedByUserId, users.id))
       .where(eq(listItems.listId, listId))
-      .orderBy(desc(listItems.addedAt));
+      .orderBy(listItems.position);
 
     return rows.map((r) => ({
       ...r.item,

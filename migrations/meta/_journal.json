@@ -29,6 +29,13 @@
       "when": 1740614400000,
       "tag": "0003_collab_lists",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1772219578341,
+      "tag": "0004_awesome_talos",
+      "breakpoints": true
     }
   ]
 }

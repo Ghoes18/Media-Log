@@ -5,6 +5,7 @@ import { createServer } from "http";
 import { seedDatabase } from "./seed";
 import { storage } from "./storage";
 import { setupWebSocketServer } from "./ws";
+import { backfillMissingCovers } from "./backfill-covers";
 
 const app = express();
 const httpServer = createServer(app);
@@ -53,6 +54,7 @@ app.use((req, res, next) => {
 (async () => {
   await seedDatabase();
   await storage.seedBadgesIfEmpty();
+  backfillMissingCovers().catch((err) => console.error("[backfill] error:", err));
   setupWebSocketServer(httpServer);
   await registerRoutes(httpServer, app);
 

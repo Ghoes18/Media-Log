@@ -99,14 +99,14 @@ function mapTvResult(item: any, genreMap: Map<number, string>, type: "tv" | "ani
   };
 }
 
-export async function getTrendingMovies(limit = 10): Promise<TmdbResult[]> {
+export async function getTrendingMovies(limit = 10, page = 0): Promise<TmdbResult[]> {
   if (!TMDB_API_KEY) return [];
-  const cacheKey = "trending-movie";
+  const cacheKey = `trending-movie-${page}`;
   const cached = getCached<TmdbResult[]>(cacheKey);
   if (cached) return cached.slice(0, limit);
   try {
     const [data, genres] = await Promise.all([
-      tmdbFetch("/trending/movie/week"),
+      tmdbFetch(`/trending/movie/week?page=${page + 1}`),
       getMovieGenres(),
     ]);
     const results = (data.results || []).map((item: any) => mapMovieResult(item, genres));
@@ -118,14 +118,34 @@ export async function getTrendingMovies(limit = 10): Promise<TmdbResult[]> {
   }
 }
 
-export async function getTrendingTv(limit = 10): Promise<TmdbResult[]> {
+/** Paginated list of popular movies (full catalog, not just trending this week). */
+export async function getDiscoverMovies(limit = 10, page = 0): Promise<TmdbResult[]> {
   if (!TMDB_API_KEY) return [];
-  const cacheKey = "trending-tv";
+  const cacheKey = `discover-movie-${page}`;
   const cached = getCached<TmdbResult[]>(cacheKey);
   if (cached) return cached.slice(0, limit);
   try {
     const [data, genres] = await Promise.all([
-      tmdbFetch("/trending/tv/week"),
+      tmdbFetch(`/discover/movie?sort_by=popularity.desc&page=${page + 1}`),
+      getMovieGenres(),
+    ]);
+    const results = (data.results || []).map((item: any) => mapMovieResult(item, genres));
+    setCache(cacheKey, results);
+    return results.slice(0, limit);
+  } catch (e) {
+    console.error("getDiscoverMovies error:", e);
+    return [];
+  }
+}
+
+export async function getTrendingTv(limit = 10, page = 0): Promise<TmdbResult[]> {
+  if (!TMDB_API_KEY) return [];
+  const cacheKey = `trending-tv-${page}`;
+  const cached = getCached<TmdbResult[]>(cacheKey);
+  if (cached) return cached.slice(0, limit);
+  try {
+    const [data, genres] = await Promise.all([
+      tmdbFetch(`/trending/tv/week?page=${page + 1}`),
       getTvGenres(),
     ]);
     const results = (data.results || []).map((item: any) => mapTvResult(item, genres));
@@ -137,14 +157,34 @@ export async function getTrendingTv(limit = 10): Promise<TmdbResult[]> {
   }
 }
 
-export async function getTrendingAnime(limit = 10): Promise<TmdbResult[]> {
+/** Paginated list of popular TV shows (full catalog, not just trending this week). */
+export async function getDiscoverTv(limit = 10, page = 0): Promise<TmdbResult[]> {
   if (!TMDB_API_KEY) return [];
-  const cacheKey = "trending-anime";
+  const cacheKey = `discover-tv-${page}`;
   const cached = getCached<TmdbResult[]>(cacheKey);
   if (cached) return cached.slice(0, limit);
   try {
     const [data, genres] = await Promise.all([
-      tmdbFetch("/discover/tv?with_genres=16&sort_by=popularity.desc"),
+      tmdbFetch(`/discover/tv?sort_by=popularity.desc&page=${page + 1}`),
+      getTvGenres(),
+    ]);
+    const results = (data.results || []).map((item: any) => mapTvResult(item, genres));
+    setCache(cacheKey, results);
+    return results.slice(0, limit);
+  } catch (e) {
+    console.error("getDiscoverTv error:", e);
+    return [];
+  }
+}
+
+export async function getTrendingAnime(limit = 10, page = 0): Promise<TmdbResult[]> {
+  if (!TMDB_API_KEY) return [];
+  const cacheKey = `trending-anime-${page}`;
+  const cached = getCached<TmdbResult[]>(cacheKey);
+  if (cached) return cached.slice(0, limit);
+  try {
+    const [data, genres] = await Promise.all([
+      tmdbFetch(`/discover/tv?with_genres=16&sort_by=popularity.desc&page=${page + 1}`),
       getTvGenres(),
     ]);
     const results = (data.results || []).map((item: any) => mapTvResult(item, genres, "anime"));
@@ -156,14 +196,19 @@ export async function getTrendingAnime(limit = 10): Promise<TmdbResult[]> {
   }
 }
 
-export async function searchTmdbMovies(query: string, limit = 10): Promise<TmdbResult[]> {
+/** Paginated list of popular animation (full catalog, not just trending). Same as getTrendingAnime but named for consistency. */
+export async function getDiscoverAnime(limit = 10, page = 0): Promise<TmdbResult[]> {
+  return getTrendingAnime(limit, page);
+}
+
+export async function searchTmdbMovies(query: string, limit = 10, page = 0): Promise<TmdbResult[]> {
   if (!TMDB_API_KEY || !query) return [];
-  const cacheKey = `search-movie-${query.toLowerCase().trim()}`;
+  const cacheKey = `search-movie-${query.toLowerCase().trim()}-${page}`;
   const cached = getCached<TmdbResult[]>(cacheKey);
   if (cached) return cached.slice(0, limit);
   try {
     const [data, genres] = await Promise.all([
-      tmdbFetch(`/search/movie?query=${encodeURIComponent(query)}`),
+      tmdbFetch(`/search/movie?query=${encodeURIComponent(query)}&page=${page + 1}`),
       getMovieGenres(),
     ]);
     const results = (data.results || []).map((item: any) => mapMovieResult(item, genres));
@@ -175,14 +220,14 @@ export async function searchTmdbMovies(query: string, limit = 10): Promise<TmdbR
   }
 }
 
-export async function searchTmdbTv(query: string, limit = 10): Promise<TmdbResult[]> {
+export async function searchTmdbTv(query: string, limit = 10, page = 0): Promise<TmdbResult[]> {
   if (!TMDB_API_KEY || !query) return [];
-  const cacheKey = `search-tv-${query.toLowerCase().trim()}`;
+  const cacheKey = `search-tv-${query.toLowerCase().trim()}-${page}`;
   const cached = getCached<TmdbResult[]>(cacheKey);
   if (cached) return cached.slice(0, limit);
   try {
     const [data, genres] = await Promise.all([
-      tmdbFetch(`/search/tv?query=${encodeURIComponent(query)}`),
+      tmdbFetch(`/search/tv?query=${encodeURIComponent(query)}&page=${page + 1}`),
       getTvGenres(),
     ]);
     const results = (data.results || []).map((item: any) => mapTvResult(item, genres));
@@ -194,14 +239,14 @@ export async function searchTmdbTv(query: string, limit = 10): Promise<TmdbResul
   }
 }
 
-export async function searchTmdbAnime(query: string, limit = 10): Promise<TmdbResult[]> {
+export async function searchTmdbAnime(query: string, limit = 10, page = 0): Promise<TmdbResult[]> {
   if (!TMDB_API_KEY || !query) return [];
-  const cacheKey = `search-anime-${query.toLowerCase().trim()}`;
+  const cacheKey = `search-anime-${query.toLowerCase().trim()}-${page}`;
   const cached = getCached<TmdbResult[]>(cacheKey);
   if (cached) return cached.slice(0, limit);
   try {
     const [data, genres] = await Promise.all([
-      tmdbFetch(`/search/tv?query=${encodeURIComponent(query)}`),
+      tmdbFetch(`/search/tv?query=${encodeURIComponent(query)}&page=${page + 1}`),
       getTvGenres(),
     ]);
     const ANIMATION_GENRE_ID = 16;
@@ -267,6 +312,38 @@ export interface TmdbSimilarItem {
   voteAverage: number;
 }
 
+export interface TmdbSeasonSummary {
+  id: number;
+  seasonNumber: number;
+  name: string;
+  overview: string;
+  airDate: string;
+  episodeCount: number;
+  posterUrl: string | null;
+}
+
+export interface TmdbSeasonEpisode {
+  id: number;
+  episodeNumber: number;
+  seasonNumber: number;
+  name: string;
+  overview: string;
+  airDate: string;
+  runtime: number | null;
+  stillUrl: string | null;
+  voteAverage: number;
+}
+
+export interface TmdbSeasonDetail {
+  id: number;
+  seasonNumber: number;
+  name: string;
+  overview: string;
+  airDate: string;
+  posterUrl: string | null;
+  episodes: TmdbSeasonEpisode[];
+}
+
 export interface TmdbDetailResult {
   externalId: string;
   type: "movie" | "tv" | "anime";
@@ -297,6 +374,7 @@ export interface TmdbDetailResult {
   releases: TmdbRelease[];
   similar: TmdbSimilarItem[];
   keywords: string[];
+  seasons: TmdbSeasonSummary[];
 }
 
 function mapTmdbDetails(data: any, type: "movie" | "tv"): TmdbDetailResult {
@@ -369,6 +447,18 @@ function mapTmdbDetails(data: any, type: "movie" | "tv"): TmdbDetailResult {
   const keywords = Array.isArray(rawKeywords)
     ? rawKeywords.map((k: any) => (typeof k === "string" ? k : k?.name ?? ""))
     : [];
+  const seasons: TmdbSeasonSummary[] =
+    type === "tv"
+      ? (data.seasons || []).map((season: any) => ({
+          id: season.id,
+          seasonNumber: season.season_number,
+          name: season.name || `Season ${season.season_number}`,
+          overview: season.overview || "",
+          airDate: season.air_date || "",
+          episodeCount: season.episode_count ?? 0,
+          posterUrl: season.poster_path ? `${TMDB_IMG}${season.poster_path}` : null,
+        }))
+      : [];
   return {
     externalId: String(data.id),
     type: type === "tv" ? "tv" : "movie",
@@ -408,6 +498,7 @@ function mapTmdbDetails(data: any, type: "movie" | "tv"): TmdbDetailResult {
     releases,
     similar,
     keywords,
+    seasons,
   };
 }
 
@@ -480,6 +571,43 @@ export async function getTmdbDetailsByImdbId(imdbId: string): Promise<TmdbDetail
     return result;
   } catch (e) {
     console.error("getTmdbDetailsByImdbId error:", e);
+    return null;
+  }
+}
+
+export async function getTmdbSeasonDetails(
+  tmdbId: string,
+  seasonNumber: number,
+): Promise<TmdbSeasonDetail | null> {
+  if (!TMDB_API_KEY || !tmdbId || !Number.isFinite(seasonNumber)) return null;
+  const cacheKey = `tv-season-${tmdbId}-${seasonNumber}`;
+  const cached = getCached<TmdbSeasonDetail>(cacheKey);
+  if (cached) return cached;
+  try {
+    const data = await tmdbFetch(`/tv/${tmdbId}/season/${seasonNumber}`);
+    const result: TmdbSeasonDetail = {
+      id: data.id,
+      seasonNumber: data.season_number,
+      name: data.name || `Season ${seasonNumber}`,
+      overview: data.overview || "",
+      airDate: data.air_date || "",
+      posterUrl: data.poster_path ? `${TMDB_IMG}${data.poster_path}` : null,
+      episodes: (data.episodes || []).map((episode: any) => ({
+        id: episode.id,
+        episodeNumber: episode.episode_number,
+        seasonNumber: episode.season_number,
+        name: episode.name || `Episode ${episode.episode_number}`,
+        overview: episode.overview || "",
+        airDate: episode.air_date || "",
+        runtime: episode.runtime ?? null,
+        stillUrl: episode.still_path ? `${TMDB_IMG}${episode.still_path}` : null,
+        voteAverage: episode.vote_average ?? 0,
+      })),
+    };
+    setCache(cacheKey, result);
+    return result;
+  } catch (e) {
+    console.error("getTmdbSeasonDetails error:", e);
     return null;
   }
 }

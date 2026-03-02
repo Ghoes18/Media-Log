@@ -83,10 +83,10 @@ async function getCoverArt(mbid: string): Promise<string> {
   }
 }
 
-export async function searchSpotifyAlbums(query: string, limit = 10) {
+export async function searchSpotifyAlbums(query: string, limit = 10, offset = 0) {
   try {
     const data = await spotifyFetch(
-      `/search?q=${encodeURIComponent(query)}&type=album&limit=${limit}`
+      `/search?q=${encodeURIComponent(query)}&type=album&limit=${limit}&offset=${offset}`
     );
     return (data.albums?.items || []).map((album: any) => ({
       externalId: album.id,

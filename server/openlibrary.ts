@@ -1,4 +1,5 @@
-export async function getTrendingBooks(limit = 10) {
+export async function getTrendingBooks(limit = 10, page = 0) {
+  if (page > 0) return []; // trending weekly has no offset support
   try {
     const url = `https://openlibrary.org/trending/weekly.json?limit=${limit}`;
     const res = await fetch(url);
@@ -25,8 +26,8 @@ export async function getTrendingBooks(limit = 10) {
   }
 }
 
-export async function searchOpenLibraryBooks(query: string, limit = 10) {
-  const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=${limit}&fields=key,title,author_name,first_publish_year,cover_i,subject,first_sentence`;
+export async function searchOpenLibraryBooks(query: string, limit = 10, offset = 0) {
+  const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}&fields=key,title,author_name,first_publish_year,cover_i,subject,first_sentence`;
   const res = await fetch(url);
   if (!res.ok) return [];
   const data = await res.json();

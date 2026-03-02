@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useParams } from "wouter";
+import { useEffect, useState } from "react";
+import { Link, useParams, useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   Bookmark,
   BookOpen,
+  ChevronDown,
   Clapperboard,
   Eye,
   Film,
@@ -198,6 +199,8 @@ export default function MediaDetail() {
 
   const [draft, setDraft] = useState("");
   const [draftRating, setDraftRating] = useState(0);
+  const [selectedSeasonNumber, setSelectedSeasonNumber] = useState<number | null>(null);
+  const [selectedEpisodeNumber, setSelectedEpisodeNumber] = useState<number | null>(null);
   const { currentUser } = useAuth();
   const { isPro } = useSubscription();
   const { ensureAndNavigate } = useEnsureMedia();
@@ -220,6 +223,37 @@ export default function MediaDetail() {
     queryKey: [`/api/media/${id}/reviews`],
     enabled: !!id,
   });
+
+  const { data: selectedSeasonDetails, isLoading: seasonDetailsLoading } = useQuery<any>({
+    queryKey: ["/api/tmdb/tv/season", media?.externalId || "", selectedSeasonNumber ?? -1],
+    queryFn: () =>
+      fetch(`/api/tmdb/tv/${media.externalId}/season/${selectedSeasonNumber}`).then((r) => r.json()),
+    enabled:
+      !!media?.externalId &&
+      (media?.type === "tv" || media?.type === "anime") &&
+      selectedSeasonNumber != null,
+  });
+
+  const { data: episodeReviews = [], isLoading: episodeReviewsLoading } = useQuery<any[]>({
+    queryKey: [`/api/media/${id}/reviews`, "episode", selectedSeasonNumber ?? -1, selectedEpisodeNumber ?? -1],
+    queryFn: () =>
+      fetch(`/api/media/${id}/reviews?season=${selectedSeasonNumber}&episode=${selectedEpisodeNumber}`).then((r) =>
+        r.json(),
+      ),
+    enabled: !!id && selectedSeasonNumber != null && selectedEpisodeNumber != null,
+  });
+
+  const { data: allSeasonsData = [] } = useQuery<any[]>({
+    queryKey: ["/api/tmdb/tv/all-seasons", media?.externalId || ""],
+    queryFn: () =>
+      fetch(`/api/tmdb/tv/${media.externalId}/all-seasons`).then((r) => r.json()),
+    enabled:
+      !!media?.externalId &&
+      (media?.type === "tv" || media?.type === "anime"),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const [, navigate] = useLocation();
 
   const { data: stats = { watched: 0, likes: 0, listed: 0 } } = useQuery<any>({
     queryKey: [`/api/media/${id}/stats`],
@@ -297,11 +331,18 @@ export default function MediaDetail() {
   });
 
   const postReview = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (payload: {
+      body: string;
+      rating: number;
+      seasonNumber?: number;
+      episodeNumber?: number;
+    }) => {
       await apiRequest("POST", "/api/reviews", {
         mediaId: id,
-        rating: draftRating,
-        body: draft,
+        rating: payload.rating,
+        body: payload.body,
+        seasonNumber: payload.seasonNumber,
+        episodeNumber: payload.episodeNumber,
       });
     },
     onSuccess: () => {
@@ -346,6 +387,37 @@ export default function MediaDetail() {
     }
   };
 
+  const mediaType = media?.type as MediaType | undefined;
+  const isTvLike = mediaType === "tv" || mediaType === "anime";
+  const availableSeasons = (richDetails?.seasons ?? [])
+    .filter((season: any) => season.seasonNumber > 0)
+    .sort((a: any, b: any) => a.seasonNumber - b.seasonNumber);
+  const availableEpisodes = selectedSeasonDetails?.episodes ?? [];
+  useEffect(() => {
+    if (!isTvLike || availableSeasons.length === 0) {
+      setSelectedSeasonNumber(null);
+      setSelectedEpisodeNumber(null);
+      return;
+    }
+    if (selectedSeasonNumber == null || !availableSeasons.some((season: any) => season.seasonNumber === selectedSeasonNumber)) {
+      setSelectedSeasonNumber(availableSeasons[0].seasonNumber);
+      setSelectedEpisodeNumber(null);
+    }
+  }, [availableSeasons, isTvLike, selectedSeasonNumber]);
+
+  useEffect(() => {
+    if (availableEpisodes.length === 0) {
+      setSelectedEpisodeNumber(null);
+      return;
+    }
+    if (
+      selectedEpisodeNumber == null ||
+      !availableEpisodes.some((episode: any) => episode.episodeNumber === selectedEpisodeNumber)
+    ) {
+      setSelectedEpisodeNumber(availableEpisodes[0].episodeNumber);
+    }
+  }, [availableEpisodes, selectedEpisodeNumber]);
+
   if (mediaLoading || !media) {
     return (
       <div className="min-h-dvh bg-background flex items-center justify-center">
@@ -355,19 +427,17 @@ export default function MediaDetail() {
   }
 
   const Icon = iconFor(media.type as MediaType);
-  const ratingNum = media.rating ? parseFloat(media.rating) : null;
   const topReviews = [...reviews].sort((a: any, b: any) => (b.likeCount ?? 0) - (a.likeCount ?? 0));
   const newReviews = [...reviews];
-
-  const mediaType = media.type as MediaType;
-  const isTmdb = (TMDB_TYPES as readonly string[]).includes(mediaType);
-  const tmdbType = mediaType === "anime" ? "tv" : mediaType;
+  const resolvedMediaType = media.type as MediaType;
+  const isTmdb = (TMDB_TYPES as readonly string[]).includes(resolvedMediaType);
+  const tmdbType = resolvedMediaType === "anime" ? "tv" : resolvedMediaType;
 
   const personDiscoverUrl = (personId: string | number, personName: string) =>
-    `/discover?person=${encodeURIComponent(personName)}&personId=${personId}&type=${mediaType}`;
+    `/discover?person=${encodeURIComponent(personName)}&personId=${personId}&type=${resolvedMediaType}`;
   const backdropUrl =
     richDetails?.backdropUrl ||
-    (mediaType === "music" || mediaType === "book" ? (media.coverUrl || null) : null);
+    (resolvedMediaType === "music" || resolvedMediaType === "book" ? (media.coverUrl || null) : null);
   const posterUrl = richDetails?.posterUrl || media.coverUrl;
   const directorCrew = isTmdb && richDetails?.crew ? richDetails.crew.find((c: any) => c.job === "Director") : null;
   const director = directorCrew?.name || media.creator;
@@ -381,12 +451,12 @@ export default function MediaDetail() {
     media.tags ||
     [];
   const firstCert = isTmdb && richDetails?.releases?.[0]?.certification;
-  const countries = isTmdb && richDetails?.productionCountries?.map((c: any) => c.name) || [];
+  const countries = (isTmdb && richDetails?.productionCountries?.map((c: any) => c.name)) || [];
 
   const trailer =
     isTmdb && richDetails?.videos?.length
       ? richDetails.videos.find((v: any) => v.type === "Trailer" && v.official) || richDetails.videos[0]
-      : mediaType === "game" && richDetails?.trailers?.length
+      : resolvedMediaType === "game" && richDetails?.trailers?.length
         ? richDetails.trailers[0]
         : null;
 
@@ -582,35 +652,49 @@ export default function MediaDetail() {
                   <RatingHistogram reviews={reviews} />
                 )}
 
-                {isTmdb && richDetails?.imdbId && (() => {
+                {isTmdb && (() => {
                   const imdbSourceRating =
-                    richDetails.imdbRating ??
-                    (String(media.externalId) === String(richDetails.imdbId) ? media.rating : null);
-                  const imdbSourceNum = Number.parseFloat(String(imdbSourceRating ?? ""));
-                  const mediaNum = Number.parseFloat(String(media.rating ?? ""));
-                  const tmdbFallbackNum = Number.parseFloat(String(richDetails.voteAverage ?? ""));
-                  const resolvedRating = Number.isFinite(imdbSourceNum)
-                    ? imdbSourceNum
-                    : Number.isFinite(mediaNum)
-                      ? mediaNum
-                      : Number.isFinite(tmdbFallbackNum)
-                        ? tmdbFallbackNum
-                        : null;
-                  const ratingDisplay = resolvedRating != null ? resolvedRating.toFixed(1) : null;
+                    richDetails?.imdbId &&
+                    (richDetails.imdbRating ??
+                      (String(media.externalId) === String(richDetails.imdbId) ? media.rating : null));
+                  const imdbSourceNum = imdbSourceRating != null ? Number.parseFloat(String(imdbSourceRating)) : NaN;
+                  const imdbDisplay = Number.isFinite(imdbSourceNum) ? imdbSourceNum.toFixed(1) : null;
+                  const tmdbVal = richDetails?.voteAverage != null ? Number(richDetails.voteAverage) : NaN;
+                  const tmdbDisplay = Number.isFinite(tmdbVal) ? tmdbVal.toFixed(1) : null;
+                  const hasExternal = imdbDisplay != null || tmdbDisplay != null;
+                  if (!hasExternal) return null;
                   return (
-                    <div className="mt-3 flex items-center gap-2">
-                      <a
-                        href={`https://www.imdb.com/title/${richDetails.imdbId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 rounded border border-transparent transition-colors hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        aria-label={ratingDisplay ? `IMDb rating ${ratingDisplay}` : "View on IMDb"}
-                      >
-                        <ImdbLogo />
-                        <span className="font-serif text-lg font-semibold text-foreground" data-testid="imdb-rating">
-                          {ratingDisplay ?? "—"}
-                        </span>
-                      </a>
+                    <div className="mt-4 pt-3 border-t border-border/40">
+                      <span className="text-[11px] font-semibold tracking-widest text-muted-foreground/80 uppercase">
+                        External ratings
+                      </span>
+                      <div className="mt-2 flex flex-wrap items-center gap-3">
+                        {richDetails?.imdbId && (
+                          <a
+                            href={`https://www.imdb.com/title/${richDetails.imdbId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 rounded border border-transparent transition-colors hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            aria-label={imdbDisplay ? `IMDb rating ${imdbDisplay}` : "View on IMDb"}
+                          >
+                            <ImdbLogo />
+                            <span className="font-serif text-base font-semibold text-foreground/90" data-testid="imdb-rating">
+                              {imdbDisplay ?? "—"}
+                            </span>
+                          </a>
+                        )}
+                        {tmdbDisplay != null && (
+                          <span
+                            className="inline-flex items-center gap-1.5 rounded border border-border/50 bg-muted/30 px-2 py-1 font-serif text-base font-semibold text-foreground/90"
+                            title="TMDB vote average"
+                          >
+                            <span className="text-[10px] font-sans font-medium tracking-wider text-muted-foreground uppercase">
+                              TMDB
+                            </span>
+                            {tmdbDisplay}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   );
                 })()}
@@ -619,7 +703,7 @@ export default function MediaDetail() {
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
+        <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_340px]">
           <div className="min-w-0 space-y-6">
             {/* Synopsis */}
             {overview && (
@@ -636,6 +720,16 @@ export default function MediaDetail() {
                   ))}
                 </div>
               </section>
+            )}
+
+            {/* Episode ratings chart for TV/anime */}
+            {isTvLike && allSeasonsData && allSeasonsData.some((s: any) => s?.episodes?.length > 0) && (
+              <EpisodeRatingsChart
+                allSeasonsData={allSeasonsData}
+                onEpisodeClick={(seasonNumber, episodeNumber) =>
+                  navigate(`/m/${id}/s/${seasonNumber}/e/${episodeNumber}`)
+                }
+              />
             )}
 
             {/* Tabbed content: type-specific */}
@@ -673,6 +767,11 @@ export default function MediaDetail() {
                     {richDetails.releases?.length > 0 && (
                       <TabsTrigger value="releases" className="rounded-md text-xs sm:text-sm">
                         Releases
+                      </TabsTrigger>
+                    )}
+                    {isTvLike && availableSeasons.length > 0 && (
+                      <TabsTrigger value="seasons" className="rounded-md text-xs sm:text-sm">
+                        Seasons
                       </TabsTrigger>
                     )}
                   </TabsList>
@@ -823,6 +922,95 @@ export default function MediaDetail() {
                           </div>
                         ))}
                       </div>
+                    </TabsContent>
+                  )}
+
+                  {isTvLike && availableSeasons.length > 0 && (
+                    <TabsContent value="seasons" className="mt-4 space-y-4">
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-medium uppercase text-muted-foreground">Season</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {availableSeasons.map((season: any) => (
+                            <button
+                              key={season.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedSeasonNumber(season.seasonNumber);
+                                setSelectedEpisodeNumber(null);
+                              }}
+                              className={cn(
+                                "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                                selectedSeasonNumber === season.seasonNumber
+                                  ? "border-primary bg-primary/10 text-primary"
+                                  : "border-border hover:bg-muted/50",
+                              )}
+                            >
+                              S{season.seasonNumber} · {season.episodeCount} eps
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {seasonDetailsLoading ? (
+                        <div className="text-sm text-muted-foreground">Loading episodes…</div>
+                      ) : availableEpisodes.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">No episodes found for this season.</div>
+                      ) : (
+                        <div className="space-y-3">
+                          <h4 className="text-xs font-medium uppercase text-muted-foreground">Episode</h4>
+                          <div className="grid gap-3 md:grid-cols-2">
+                            {availableEpisodes.map((episode: any) => (
+                              <Link
+                                key={episode.id}
+                                href={`/m/${id}/s/${episode.seasonNumber}/e/${episode.episodeNumber}`}
+                                className={cn(
+                                  "overflow-hidden rounded-lg border bg-card text-left transition-colors hover:bg-muted/50 block",
+                                )}
+                              >
+                                {episode.stillUrl && (
+                                  <img
+                                    src={episode.stillUrl}
+                                    alt=""
+                                    className="h-28 w-full object-cover"
+                                    loading="lazy"
+                                  />
+                                )}
+                                <div className="space-y-1 p-3">
+                                  <div className="text-xs text-muted-foreground">
+                                    S{episode.seasonNumber}E{episode.episodeNumber}
+                                    {episode.airDate ? ` · ${episode.airDate}` : ""}
+                                  </div>
+                                  <div className="text-sm font-medium">{episode.name}</div>
+                                  {episode.overview && (
+                                    <p className="line-clamp-3 text-xs text-muted-foreground">{episode.overview}</p>
+                                  )}
+                                </div>
+                              </Link>
+                            ))}
+                          </div>
+
+                          <div className="space-y-2">
+                            <h4 className="text-xs font-medium uppercase text-muted-foreground">Episode reviews</h4>
+                            {episodeReviewsLoading ? (
+                              <div className="text-sm text-muted-foreground">Loading reviews…</div>
+                            ) : episodeReviews.length === 0 ? (
+                              <div className="text-sm text-muted-foreground">No reviews for this episode yet.</div>
+                            ) : (
+                              <div className="space-y-3">
+                                {episodeReviews.map((r: any) => (
+                                  <ReviewCard
+                                    key={r.id}
+                                    r={r}
+                                    currentUser={currentUser}
+                                    onLike={likeReview}
+                                    onUnlike={unlikeReview}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </TabsContent>
                   )}
                 </Tabs>
@@ -1392,7 +1580,12 @@ export default function MediaDetail() {
                   className="rounded-md"
                   data-testid="button-post-quick"
                   disabled={!draft.trim() || draftRating === 0 || !currentUser || postReview.isPending}
-                  onClick={() => postReview.mutate()}
+                  onClick={() =>
+                    postReview.mutate({
+                      body: draft,
+                      rating: draftRating,
+                    })
+                  }
                 >
                   Post
                 </Button>
@@ -1427,6 +1620,180 @@ export default function MediaDetail() {
 
       <BottomNav />
     </div>
+  );
+}
+
+const RATING_TIERS = [
+  { label: "Masterpiece", color: "bg-fuchsia-600 shadow-[0_0_12px_rgba(192,38,211,0.6)] ring-1 ring-fuchsia-400/50 z-10", min: 9.5, text: "text-white font-black" },
+  { label: "Excellent", color: "bg-violet-500 border border-violet-400/30", min: 8.5, text: "text-white font-bold" },
+  { label: "Great", color: "bg-blue-500 border border-blue-400/30", min: 7.5, text: "text-white font-semibold" },
+  { label: "Good", color: "bg-emerald-500 border border-emerald-400/30", min: 6.5, text: "text-white font-medium" },
+  { label: "Mixed", color: "bg-amber-500 border border-amber-400/30", min: 5.0, text: "text-white font-medium" },
+  { label: "Poor", color: "bg-orange-500 border border-orange-400/30", min: 3.0, text: "text-white font-medium" },
+  { label: "Awful", color: "bg-red-600 border border-red-500/30", min: 0, text: "text-white font-bold" },
+];
+
+function getRatingStyles(rating: number) {
+  if (!rating || rating === 0) return { color: "bg-muted/10 border border-dashed border-border/50", text: "text-transparent" };
+  const tier = RATING_TIERS.find((t) => rating >= t.min) || RATING_TIERS[RATING_TIERS.length - 1];
+  return { color: tier.color, text: tier.text };
+}
+
+function EpisodeRatingsChart({
+  allSeasonsData,
+  onEpisodeClick,
+}: {
+  allSeasonsData: any[];
+  onEpisodeClick: (seasonNumber: number, episodeNumber: number) => void;
+}) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const validSeasons = allSeasonsData.filter((s) => s && s.episodes && s.episodes.length > 0);
+  if (validSeasons.length === 0) return null;
+
+  const maxEpisodes = Math.max(...validSeasons.map((s) => s.episodes.length));
+
+  // Compute averages
+  const seasonAverages = validSeasons.map((season) => {
+    const ratedEps = season.episodes.filter((ep: any) => ep.voteAverage > 0);
+    if (ratedEps.length === 0) return 0;
+    return ratedEps.reduce((acc: number, ep: any) => acc + ep.voteAverage, 0) / ratedEps.length;
+  });
+
+  return (
+    <Card className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm backdrop-blur-xl relative overflow-hidden sm:p-5 md:p-6">
+      <div className="absolute top-0 right-0 w-64 h-64 bg-fuchsia-500/5 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
+
+      {/* Header: always visible, touch-friendly collapse toggle (44px min) */}
+      <div className="relative z-10 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="font-serif text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+            Episode Ratings
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5 sm:text-sm">
+            {isCollapsed ? "Tap to show chart" : "Performance across all seasons"}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsCollapsed((c) => !c)}
+          className={cn(
+            "shrink-0 flex items-center justify-center rounded-lg border border-border/60 bg-background/80 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+            "min-h-[44px] min-w-[44px] touch-manipulation"
+          )}
+          aria-expanded={!isCollapsed}
+          aria-label={isCollapsed ? "Show episode ratings chart" : "Hide episode ratings chart"}
+        >
+          <ChevronDown
+            className={cn("h-5 w-5 sm:h-6 sm:w-6 transition-transform duration-200", !isCollapsed && "rotate-180")}
+          />
+        </button>
+      </div>
+
+      {/* Collapsible body */}
+      {!isCollapsed && (
+        <>
+          {/* Legend: responsive wrap + horizontal scroll on very small screens */}
+          <div className="flex flex-wrap gap-x-2 gap-y-2 mt-4 mb-6 overflow-x-auto pb-1 -mx-1 styled-scrollbar sm:gap-x-3 sm:mb-8 md:-mx-0">
+            {RATING_TIERS.map((tier) => (
+              <div
+                key={tier.label}
+                className="flex items-center gap-1.5 shrink-0 bg-background/60 px-2 py-1.5 rounded-full border border-border/50 shadow-sm text-[11px] font-medium sm:gap-2 sm:px-2.5 sm:text-xs"
+              >
+                <span
+                  className={cn(
+                    "w-2 h-2 rounded-full shadow-sm sm:w-2.5 sm:h-2.5",
+                    tier.color.split(" ").filter((c) => c.startsWith("bg-") || c.startsWith("shadow")).join(" ")
+                  )}
+                />
+                <span className="text-foreground/80 tracking-tight whitespace-nowrap">{tier.label}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Chart: horizontal scroll, touch-friendly, smooth on iOS */}
+          <div
+            className="overflow-x-auto overflow-y-hidden pb-4 -mx-1 styled-scrollbar touch-pan-x md:mx-0"
+            style={{ WebkitOverflowScrolling: "touch" }}
+          >
+            <div className="min-w-max flex flex-col gap-1.5">
+              {/* Season header row */}
+              <div className="flex gap-1.5 mb-2">
+                <div className="w-10 shrink-0 sm:w-12" />
+                {validSeasons.map((s) => (
+                  <div
+                    key={s.seasonNumber}
+                    className="w-10 shrink-0 flex flex-col items-center justify-center text-[10px] font-black text-muted-foreground/80 uppercase tracking-widest sm:w-12 sm:text-xs"
+                  >
+                    <span>S{s.seasonNumber}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Episode rows: 44px min height on mobile for touch targets */}
+              {Array.from({ length: maxEpisodes }).map((_, rowIndex) => {
+                const epIndex = rowIndex + 1;
+                return (
+                  <div key={rowIndex} className="flex gap-1.5">
+                    <div className="w-10 h-11 shrink-0 flex items-center justify-center text-[10px] font-black text-muted-foreground/60 uppercase tracking-wider sm:w-12 sm:h-10 sm:text-[11px]">
+                      E{epIndex}
+                    </div>
+                    {validSeasons.map((season, sIdx) => {
+                      const ep = season.episodes.find((e: any) => e.episodeNumber === epIndex);
+                      const rating = ep?.voteAverage || 0;
+                      const { color, text } = getRatingStyles(rating);
+
+                      return (
+                        <button
+                          key={sIdx}
+                          type="button"
+                          title={ep ? `${ep.name} - ${rating.toFixed(1)}/10` : undefined}
+                          onClick={() => ep && onEpisodeClick(season.seasonNumber, ep.episodeNumber)}
+                          className={cn(
+                            "w-10 h-11 shrink-0 flex items-center justify-center rounded-md text-[12px] transition-all duration-300 hover:scale-[1.1] hover:shadow-md active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 touch-manipulation sm:w-12 sm:h-10 sm:text-[13px] sm:hover:scale-[1.15] sm:hover:shadow-lg",
+                            color,
+                            text,
+                            !ep && "opacity-0 pointer-events-none"
+                          )}
+                          disabled={!ep}
+                          aria-label={ep ? `Episode ${epIndex}, ${rating.toFixed(1)} out of 10` : undefined}
+                        >
+                          {rating > 0 ? rating.toFixed(1) : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+
+              {/* Average row */}
+              <div className="flex gap-1.5 mt-4 pt-4 border-t border-border/40">
+                <div className="w-10 h-11 shrink-0 flex items-center justify-center text-[9px] font-black text-muted-foreground/50 uppercase tracking-widest sm:w-12 sm:h-10 sm:text-[10px]">
+                  AVG
+                </div>
+                {seasonAverages.map((avg, sIdx) => (
+                  <div
+                    key={sIdx}
+                    className="w-10 h-11 shrink-0 flex flex-col items-center justify-center gap-1 sm:w-12 sm:h-10"
+                  >
+                    <span className="text-[12px] font-bold text-foreground/90 sm:text-[13px]">
+                      {avg > 0 ? avg.toFixed(1) : "-"}
+                    </span>
+                    {avg > 0 && (
+                      <div className="h-1 w-6 rounded-full bg-muted overflow-hidden flex sm:w-8">
+                        <div
+                          className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 transition-all duration-500 ease-out"
+                          style={{ width: `${(avg / 10) * 100}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </Card>
   );
 }
 

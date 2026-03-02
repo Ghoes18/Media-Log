@@ -139,7 +139,6 @@ function applyFiltersAndSort(
 
 function Cover({ m, compact }: { readonly m: any; readonly compact?: boolean }) {
   const Icon = mediaIcon(m.type);
-  const displayRating = m.rating ? Number.parseFloat(m.rating) : null;
   const itemId = m.id || m.externalId || "unknown";
   if (compact) {
     return (
@@ -201,17 +200,9 @@ function Cover({ m, compact }: { readonly m: any; readonly compact?: boolean }) 
         <div className="text-sm font-semibold leading-tight text-white drop-shadow-sm">
           {m.title}
         </div>
-        <div className="mt-0.5 flex items-center justify-between gap-2">
-          <div className="truncate text-xs text-white/80 drop-shadow-sm">
-            {m.creator}
-            {m.year ? ` · ${m.year}` : ""}
-          </div>
-          {displayRating != null && (
-            <div className="flex items-center gap-1 rounded-full bg-black/35 px-2 py-1 text-xs text-white ring-1 ring-white/15 backdrop-blur-sm">
-              <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-              {displayRating.toFixed(1)}
-            </div>
-          )}
+        <div className="mt-0.5 truncate text-xs text-white/80 drop-shadow-sm">
+          {m.creator}
+          {m.year ? ` · ${m.year}` : ""}
         </div>
       </div>
     </div>
@@ -799,13 +790,17 @@ export default function Discover() {
                       const Icon = mediaIcon(type);
                       return (
                         <section key={type}>
-                          <div className="mb-3 flex items-center gap-2">
+                          <Link
+                            href={`/discover/${type}`}
+                            className="mb-3 flex items-center gap-2 w-fit rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            data-testid={`link-category-${type}`}
+                          >
                             <Icon className="h-4 w-4 text-muted-foreground" />
                             <h3 className="font-serif text-lg font-semibold">
                               Trending {MEDIA_LABELS[type]}
                             </h3>
                             <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                          </div>
+                          </Link>
                           <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 scrollbar-thin">
                             {items.map((m: any, idx: number) => {
                               const itemId = m.id || m.externalId || `item-${type}-${idx}`;
@@ -872,7 +867,7 @@ export default function Discover() {
                               ? "bg-background shadow-sm"
                               : "text-muted-foreground hover:text-foreground"
                           )}
-                          aria-pressed={viewMode === "grid" ? "true" : "false"}
+                          {...(viewMode === "grid" ? { "aria-pressed": "true" as const } : { "aria-pressed": "false" as const })}
                           aria-label="Grid view"
                         >
                           <LayoutGrid className="h-4 w-4" />
@@ -886,7 +881,7 @@ export default function Discover() {
                               ? "bg-background shadow-sm"
                               : "text-muted-foreground hover:text-foreground"
                           )}
-                          aria-pressed={viewMode === "list" ? "true" : "false"}
+                          {...(viewMode === "list" ? { "aria-pressed": "true" as const } : { "aria-pressed": "false" as const })}
                           aria-label="List view"
                         >
                           <List className="h-4 w-4" />
@@ -973,7 +968,7 @@ export default function Discover() {
                                 ? "bg-background shadow-sm"
                                 : "text-muted-foreground hover:text-foreground"
                             )}
-                            aria-pressed={viewMode === "grid" ? "true" : "false"}
+                            {...(viewMode === "grid" ? { "aria-pressed": "true" as const } : { "aria-pressed": "false" as const })}
                             aria-label="Grid view"
                           >
                             <LayoutGrid className="h-4 w-4" />
@@ -987,7 +982,7 @@ export default function Discover() {
                                 ? "bg-background shadow-sm"
                                 : "text-muted-foreground hover:text-foreground"
                             )}
-                            aria-pressed={viewMode === "list" ? "true" : "false"}
+                            {...(viewMode === "list" ? { "aria-pressed": "true" as const } : { "aria-pressed": "false" as const })}
                             aria-label="List view"
                           >
                             <List className="h-4 w-4" />

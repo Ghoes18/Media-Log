@@ -128,6 +128,14 @@
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 
+  /* Scrollbars – modern, platform-integrated */
+  --scrollbar-width: 8px;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: hsl(var(--muted-foreground) / 0.2);
+  --scrollbar-thumb-hover: hsl(var(--primary) / 0.5);
+  --scrollbar-thumb-active: hsl(var(--primary) / 0.65);
+  --scrollbar-radius: 999px;
+
   --sidebar-primary-border: hsl(var(--sidebar-primary));
   --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 
@@ -209,6 +217,48 @@
   --shadow-lg: 0px 1px 0px 0px hsl(0 0% 4% / 0.58), 0px 38px 96px -58px hsl(0 0% 4% / 0.78);
   --shadow-xl: 0px 1px 0px 0px hsl(0 0% 4% / 0.58), 0px 56px 130px -76px hsl(0 0% 4% / 0.82);
   --shadow-2xl: 0px 1px 0px 0px hsl(0 0% 4% / 0.6);
+
+  /* Scrollbars (dark) */
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: hsl(var(--muted-foreground) / 0.25);
+  --scrollbar-thumb-hover: hsl(var(--primary) / 0.55);
+  --scrollbar-thumb-active: hsl(var(--primary) / 0.7);
+}
+
+/* Scrollbars – modern, platform-integrated, primary accent on interaction */
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* WebKit (Chrome, Safari, Edge) */
+*::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-width);
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: var(--scrollbar-radius);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--scrollbar-radius);
+  transition: background 0.2s ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: var(--scrollbar-thumb-active);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 @layer base {
@@ -323,5 +373,35 @@
 
   .btn-skeuo-base:active::after {
     box-shadow: inset 0 0.0625em 0.125em rgba(255, 255, 255, 0.2);
+  }
+
+  /* Thinner scrollbar for horizontal strips / carousels */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: var(--scrollbar-radius);
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: var(--scrollbar-radius);
+    transition: background 0.2s ease;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:active {
+    background: var(--scrollbar-thumb-active);
   }
 }

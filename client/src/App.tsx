@@ -27,12 +27,14 @@ import Messages from "./pages/messages";
 import EpisodeDetail from "./pages/episode-detail";
 import Lists from "./pages/lists";
 import ListDetail from "./pages/list-detail";
+import CategoryResults from "./pages/category-results";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/signin" component={SignIn} />
+      <Route path="/discover/:type" component={CategoryResults} />
       <Route path="/discover" component={Discover} />
       <Route path="/pick" component={Pick} />
       <Route path="/watchlist" component={Watchlist} />

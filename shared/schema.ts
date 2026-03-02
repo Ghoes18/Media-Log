@@ -238,6 +238,8 @@ export const lists = pgTable("lists", {
   name: text("name").notNull(),
   description: text("description").default(""),
   visibility: text("visibility").notNull().default("private"),
+  isRanked: boolean("is_ranked").notNull().default(false),
+  tags: text("tags").array().default(sql`'{}'::text[]`),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -247,7 +249,35 @@ export const listItems = pgTable("list_items", {
   mediaId: varchar("media_id", { length: 36 }).notNull().references(() => media.id, { onDelete: "cascade" }),
   addedByUserId: varchar("added_by_user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
   addedAt: timestamp("added_at").defaultNow().notNull(),
+  position: integer("position").notNull().default(0),
+  note: text("note"),
 }, (t) => [unique("list_items_list_media_unique").on(t.listId, t.mediaId)]);
+
+export const listLikes = pgTable(
+  "list_likes",
+  {
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    listId: varchar("list_id", { length: 36 })
+      .notNull()
+      .references(() => lists.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.listId] })],
+);
+
+export const listComments = pgTable("list_comments", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  listId: varchar("list_id", { length: 36 })
+    .notNull()
+    .references(() => lists.id, { onDelete: "cascade" }),
+  userId: varchar("user_id", { length: 36 })
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
 export const listCollaborators = pgTable("list_collaborators", {
   listId: varchar("list_id", { length: 36 }).notNull().references(() => lists.id, { onDelete: "cascade" }),
@@ -306,6 +336,8 @@ export type List = typeof lists.$inferSelect;
 export type ListItem = typeof listItems.$inferSelect;
 export type ListCollaborator = typeof listCollaborators.$inferSelect;
 export type ListInvitation = typeof listInvitations.$inferSelect;
+export type ListLike = typeof listLikes.$inferSelect;
+export type ListComment = typeof listComments.$inferSelect;
 export type InsertList = z.infer<typeof insertListSchema>;
 export type InsertListItem = z.infer<typeof insertListItemSchema>;
 export type InsertListInvitation = z.infer<typeof insertListInvitationSchema>;

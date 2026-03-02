@@ -183,7 +183,6 @@ export default function Profile() {
       >
         <div className="min-h-dvh pb-20">
         <header className="sticky top-0 z-40 w-full pt-3 pb-2 sm:pt-4 sm:pb-3 px-4 sm:px-6 transition-all duration-300">
-          <div className="absolute inset-x-0 top-0 h-4 bg-background/80 backdrop-blur-xl pointer-events-none" />
           <div className="relative mx-auto max-w-6xl flex flex-col gap-2">
             <div className="flex items-center justify-between gap-3 rounded-md border border-border/50 bg-background/60 px-4 py-3 shadow-lg backdrop-blur-xl supports-[backdrop-filter]:bg-background/40">
               <div className="flex items-center gap-3 min-w-0">
