@@ -138,6 +138,26 @@ export async function getDiscoverMovies(limit = 10, page = 0): Promise<TmdbResul
   }
 }
 
+/** Paginated list of top rated movies (by TMDB vote average). */
+export async function getTopRatedMovies(limit = 20, page = 0): Promise<TmdbResult[]> {
+  if (!TMDB_API_KEY) return [];
+  const cacheKey = `top-rated-movie-${page}`;
+  const cached = getCached<TmdbResult[]>(cacheKey);
+  if (cached) return cached.slice(0, limit);
+  try {
+    const [data, genres] = await Promise.all([
+      tmdbFetch(`/movie/top_rated?page=${page + 1}`),
+      getMovieGenres(),
+    ]);
+    const results = (data.results || []).map((item: any) => mapMovieResult(item, genres));
+    setCache(cacheKey, results);
+    return results.slice(0, limit);
+  } catch (e) {
+    console.error("getTopRatedMovies error:", e);
+    return [];
+  }
+}
+
 export async function getTrendingTv(limit = 10, page = 0): Promise<TmdbResult[]> {
   if (!TMDB_API_KEY) return [];
   const cacheKey = `trending-tv-${page}`;
@@ -177,6 +197,26 @@ export async function getDiscoverTv(limit = 10, page = 0): Promise<TmdbResult[]>
   }
 }
 
+/** Paginated list of top rated TV shows (by TMDB vote average). */
+export async function getTopRatedTvShows(limit = 20, page = 0): Promise<TmdbResult[]> {
+  if (!TMDB_API_KEY) return [];
+  const cacheKey = `top-rated-tv-${page}`;
+  const cached = getCached<TmdbResult[]>(cacheKey);
+  if (cached) return cached.slice(0, limit);
+  try {
+    const [data, genres] = await Promise.all([
+      tmdbFetch(`/tv/top_rated?page=${page + 1}`),
+      getTvGenres(),
+    ]);
+    const results = (data.results || []).map((item: any) => mapTvResult(item, genres));
+    setCache(cacheKey, results);
+    return results.slice(0, limit);
+  } catch (e) {
+    console.error("getTopRatedTvShows error:", e);
+    return [];
+  }
+}
+
 export async function getTrendingAnime(limit = 10, page = 0): Promise<TmdbResult[]> {
   if (!TMDB_API_KEY) return [];
   const cacheKey = `trending-anime-${page}`;
@@ -199,6 +239,28 @@ export async function getTrendingAnime(limit = 10, page = 0): Promise<TmdbResult
 /** Paginated list of popular animation (full catalog, not just trending). Same as getTrendingAnime but named for consistency. */
 export async function getDiscoverAnime(limit = 10, page = 0): Promise<TmdbResult[]> {
   return getTrendingAnime(limit, page);
+}
+
+/** Paginated list of top rated anime (animation genre, sorted by vote average, min vote count). */
+export async function getTopRatedAnime(limit = 20, page = 0): Promise<TmdbResult[]> {
+  if (!TMDB_API_KEY) return [];
+  const cacheKey = `top-rated-anime-${page}`;
+  const cached = getCached<TmdbResult[]>(cacheKey);
+  if (cached) return cached.slice(0, limit);
+  try {
+    const [data, genres] = await Promise.all([
+      tmdbFetch(
+        `/discover/tv?with_genres=16&sort_by=vote_average.desc&vote_count.gte=200&page=${page + 1}`,
+      ),
+      getTvGenres(),
+    ]);
+    const results = (data.results || []).map((item: any) => mapTvResult(item, genres, "anime"));
+    setCache(cacheKey, results);
+    return results.slice(0, limit);
+  } catch (e) {
+    console.error("getTopRatedAnime error:", e);
+    return [];
+  }
 }
 
 export async function searchTmdbMovies(query: string, limit = 10, page = 0): Promise<TmdbResult[]> {
@@ -571,6 +633,24 @@ export async function getTmdbDetailsByImdbId(imdbId: string): Promise<TmdbDetail
     return result;
   } catch (e) {
     console.error("getTmdbDetailsByImdbId error:", e);
+    return null;
+  }
+}
+
+/** Lightweight: get TMDB poster URL for a movie by IMDb ID (single find request, cached). */
+export async function getTmdbPosterUrlByImdbId(imdbId: string): Promise<string | null> {
+  if (!TMDB_API_KEY || !imdbId || !/^tt\d+$/.test(imdbId)) return null;
+  const cacheKey = `poster-imdb-${imdbId}`;
+  const cached = getCached<string>(cacheKey);
+  if (cached) return cached;
+  try {
+    const data = await tmdbFetch(`/find/${imdbId}?external_source=imdb_id`);
+    const movie = data.movie_results?.[0];
+    const posterUrl =
+      movie?.poster_path != null ? `${TMDB_IMG}${movie.poster_path}` : null;
+    if (posterUrl) setCache(cacheKey, posterUrl);
+    return posterUrl;
+  } catch (e) {
     return null;
   }
 }

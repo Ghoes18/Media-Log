@@ -27,6 +27,8 @@ import Messages from "./pages/messages";
 import EpisodeDetail from "./pages/episode-detail";
 import Lists from "./pages/lists";
 import ListDetail from "./pages/list-detail";
+import PresetListDetail from "./pages/preset-list-detail";
+import TierListDetail from "./pages/tier-list-detail";
 import CategoryResults from "./pages/category-results";
 
 function Router() {
@@ -49,6 +51,8 @@ function Router() {
       <Route path="/messages/:conversationId" component={Messages} />
       <Route path="/lists" component={Lists} />
       <Route path="/lists/:id" component={ListDetail} />
+      <Route path="/tier-lists/:id" component={TierListDetail} />
+      <Route path="/preset-lists/:id" component={PresetListDetail} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -23,6 +23,10 @@ interface InviteCollaboratorsModalProps {
   onOpenChange: (open: boolean) => void;
   listId: string;
   collaborators: Collaborator[];
+  /** Optional: override API path for invite (e.g. tier lists use /api/tier-lists/:id/invitations) */
+  inviteEndpoint?: string;
+  /** Optional: additional query keys to invalidate on invite success */
+  invalidateKeys?: unknown[][];
 }
 
 export function InviteCollaboratorsModal({
@@ -30,6 +34,8 @@ export function InviteCollaboratorsModal({
   onOpenChange,
   listId,
   collaborators,
+  inviteEndpoint,
+  invalidateKeys,
 }: InviteCollaboratorsModalProps) {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
@@ -49,12 +55,16 @@ export function InviteCollaboratorsModal({
 
   const inviteMutation = useMutation({
     mutationFn: async (invitedUserId: string) => {
-      const res = await apiRequest("POST", `/api/lists/${listId}/invitations`, { invitedUserId });
+      const url = inviteEndpoint ?? `/api/lists/${listId}/invitations`;
+      const res = await apiRequest("POST", url, { invitedUserId });
       return res.json();
     },
     onSuccess: (_data, invitedUserId) => {
       setInvitedIds((prev) => new Set([...Array.from(prev), invitedUserId]));
       queryClient.invalidateQueries({ queryKey: [`/api/lists/${listId}`] });
+      if (invalidateKeys) {
+        invalidateKeys.forEach((key) => queryClient.invalidateQueries({ queryKey: key }));
+      }
     },
   });
 

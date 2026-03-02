@@ -36,6 +36,20 @@
       "when": 1772219578341,
       "tag": "0004_awesome_talos",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1741100000000,
+      "tag": "0005_preset_lists",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1741200000000,
+      "tag": "0006_tier_lists",
+      "breakpoints": true
     }
   ]
 }

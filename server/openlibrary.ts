@@ -45,6 +45,39 @@ export async function searchOpenLibraryBooks(query: string, limit = 10, offset =
   }));
 }
 
+/** Fetch works from a subject (e.g. "classics"). Uses Open Library Subjects API. */
+export async function getOpenLibrarySubjectWorks(
+  subject: string,
+  limit = 50,
+): Promise<{ externalId: string; title: string; creator: string; year: string; coverUrl: string; synopsis: string; tags: string[]; type: "book"; rating: string }[]> {
+  try {
+    const slug = encodeURIComponent(subject.toLowerCase().replace(/\s+/g, "_"));
+    const url = `https://openlibrary.org/subjects/${slug}.json?limit=${limit}`;
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const works = (data.works || []).slice(0, limit);
+    return works.map((w: any) => {
+      const authorNames = (w.authors || []).map((a: any) => a.name || "").filter(Boolean);
+      const coverId = w.cover_id ?? w.covers?.[0];
+      return {
+        externalId: w.key || "",
+        title: w.title || "Unknown",
+        creator: authorNames.join(", ") || "Unknown",
+        year: String(w.first_publish_year || "").slice(0, 4) || "",
+        coverUrl: coverId ? `https://covers.openlibrary.org/b/id/${coverId}-L.jpg` : "",
+        synopsis: "",
+        tags: (w.subject || []).slice(0, 3),
+        type: "book" as const,
+        rating: "",
+      };
+    });
+  } catch (e) {
+    console.error("getOpenLibrarySubjectWorks error:", e);
+    return [];
+  }
+}
+
 export async function getOpenLibraryAuthorWorks(authorKey: string, limit = 24) {
   try {
     const normalizedKey = authorKey.startsWith("/") ? authorKey : `/authors/${authorKey}`;

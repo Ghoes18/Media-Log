@@ -19,6 +19,7 @@ import {
   List as ListIcon,
   ChevronUp,
   ChevronDown,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -345,20 +346,22 @@ export default function ListDetail() {
     setEditingNoteValue(item.note ?? "");
   }
 
+  const heroImage = list?.items?.[0]?.media?.coverUrl;
+
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   if (!list || error) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3">
-        <p className="text-muted-foreground">List not found</p>
-        <Button variant="outline" size="sm" onClick={() => navigate("/lists")}>
-          <ArrowLeft className="mr-1 h-4 w-4" /> Back
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background">
+        <p className="text-muted-foreground font-mono uppercase tracking-widest text-sm">List not found</p>
+        <Button variant="outline" className=" btn-skeuo-base border-border shadow-sm" onClick={() => navigate("/lists")}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> BACK TO LISTS
         </Button>
       </div>
     );
@@ -369,287 +372,371 @@ export default function ListDetail() {
   const showSort = !list.isRanked && list.items.length > 1;
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <div className="mx-auto max-w-4xl px-4 py-6">
-        {/* Header */}
-        <div className="mb-4 flex items-start gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/lists")} className="-ml-2 mt-0.5 shrink-0">
-            <ArrowLeft className="h-4 w-4" />
+    <div className="min-h-screen bg-background pb-24 selection:bg-primary/30">
+      {/* Cinematic Hero */}
+      <div className="relative w-full h-[40vh] min-h-[300px] flex items-end border-b border-border overflow-hidden">
+        {heroImage && (
+          <>
+            <div
+              className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-30 blur-xl scale-110"
+              style={{ backgroundImage: `url(${heroImage})` }}
+              aria-hidden
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
+            <div className="bg-noise absolute inset-0 z-0 pointer-events-none" />
+          </>
+        )}
+        {!heroImage && (
+          <>
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-background to-background" />
+            <div className="bg-noise absolute inset-0 z-0"></div>
+          </>
+        )}
+        
+        <div className="relative z-10 w-full max-w-5xl mx-auto px-4 pb-8">
+          <Button variant="outline" size="icon" className="mb-6  bg-background/80 border-border shadow-sm btn-skeuo-base hover:bg-background text-foreground" onClick={() => navigate("/lists")} aria-label="Back to lists">
+            <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div className="flex-1 min-w-0">
-            {editing ? (
-              <div className="space-y-2">
-                <Input
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  maxLength={100}
-                  className="text-lg font-bold"
-                />
-                <Textarea
-                  value={editDesc}
-                  onChange={(e) => setEditDesc(e.target.value)}
-                  maxLength={500}
-                  rows={2}
-                  placeholder="Description"
-                />
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="edit-ranked"
-                    checked={editIsRanked}
-                    onChange={(e) => setEditIsRanked(e.target.checked)}
-                  />
-                  <label htmlFor="edit-ranked" className="text-sm">Ranked</label>
-                </div>
-                <Input
-                  placeholder="Tags (comma-separated)"
-                  value={editTags}
-                  onChange={(e) => setEditTags(e.target.value)}
-                />
-                <div className="flex gap-2">
-                  <Button size="sm" variant={editVisibility === "private" ? "default" : "outline"} onClick={() => setEditVisibility("private")}>
-                    <Lock className="mr-1 h-3 w-3" /> Private
-                  </Button>
-                  <Button size="sm" variant={editVisibility === "public" ? "default" : "outline"} onClick={() => setEditVisibility("public")}>
-                    <Globe className="mr-1 h-3 w-3" /> Public
-                  </Button>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    disabled={!editName.trim() || updateMutation.isPending}
-                    onClick={() =>
-                      updateMutation.mutate({
-                        name: editName,
-                        description: editDesc,
-                        visibility: editVisibility,
-                        isRanked: editIsRanked,
-                        tags: editTags.split(/[,\s]+/).map((t) => t.trim()).filter(Boolean),
-                      })
-                    }
-                  >
-                    <Check className="mr-1 h-3 w-3" /> Save
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-xl font-bold truncate">{list.name}</h1>
-                  {list.visibility === "public" ? (
-                    <Globe className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  ) : (
-                    <Lock className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  )}
-                  {list.isRanked && (
-                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Ranked</span>
-                  )}
-                </div>
-                {list.description && <p className="text-sm text-muted-foreground">{list.description}</p>}
-                {(list.tags ?? []).length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {(list.tags ?? []).map((tag) => (
-                      <span key={tag} className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">{tag}</span>
-                    ))}
-                  </div>
-                )}
-                <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
-                  {list.owner && (
-                    <Link href={`/u/${list.owner.username}`}>
-                      <div className="flex items-center gap-1.5 hover:underline cursor-pointer">
-                        <Avatar className="h-5 w-5">
-                          <AvatarImage src={list.owner.avatarUrl} />
-                          <AvatarFallback className="text-[10px]">{list.owner.displayName[0]?.toUpperCase()}</AvatarFallback>
-                        </Avatar>
-                        <span>{list.owner.displayName}</span>
+          
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div className="flex-1 min-w-0">
+              {editing ? (
+                <div className="space-y-4 bg-card p-6 border border-border shadow-md max-w-2xl relative">
+                  <div className="bg-noise absolute inset-0 z-0"></div>
+                  <div className="relative z-10 space-y-4">
+                    <Input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      maxLength={100}
+                      className="text-xl font-bold bg-background border-border shadow-inner "
+                      placeholder="List Name"
+                    />
+                    <Textarea
+                      value={editDesc}
+                      onChange={(e) => setEditDesc(e.target.value)}
+                      maxLength={500}
+                      rows={2}
+                      placeholder="Description"
+                      className="bg-background border-border shadow-inner resize-none "
+                    />
+                    <div className="flex flex-wrap items-center gap-4">
+                      <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 border border-border">
+                        <input
+                          type="checkbox"
+                          id="edit-ranked"
+                          checked={editIsRanked}
+                          onChange={(e) => setEditIsRanked(e.target.checked)}
+                          className="accent-primary"
+                        />
+                        <label htmlFor="edit-ranked" className="text-sm font-mono font-bold uppercase tracking-wider">Ranked</label>
                       </div>
-                    </Link>
-                  )}
-                  {list.visibility === "public" && currentUser && (
-                    <>
-                      <button
-                        onClick={() => (list.isLiked ? unlikeMutation.mutate() : likeMutation.mutate())}
-                        className="flex items-center gap-1"
+                      <Input
+                        placeholder="Tags (comma-separated)"
+                        value={editTags}
+                        onChange={(e) => setEditTags(e.target.value)}
+                        className="bg-background border-border shadow-inner flex-1 min-w-[200px] "
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant={editVisibility === "private" ? "default" : "outline"} className={` btn-skeuo-base ${editVisibility === "private" ? "border-primary/20" : "border-border"}`} onClick={() => setEditVisibility("private")}>
+                        <Lock className="mr-2 h-4 w-4" /> PRIVATE
+                      </Button>
+                      <Button size="sm" variant={editVisibility === "public" ? "default" : "outline"} className={` btn-skeuo-base ${editVisibility === "public" ? "border-primary/20" : "border-border"}`} onClick={() => setEditVisibility("public")}>
+                        <Globe className="mr-2 h-4 w-4" /> PUBLIC
+                      </Button>
+                    </div>
+                    <div className="flex gap-2 pt-4 border-t border-border">
+                      <Button
+                        disabled={!editName.trim() || updateMutation.isPending}
+                        onClick={() =>
+                          updateMutation.mutate({
+                            name: editName,
+                            description: editDesc,
+                            visibility: editVisibility,
+                            isRanked: editIsRanked,
+                            tags: editTags.split(/[,\s]+/).map((t) => t.trim()).filter(Boolean),
+                          })
+                        }
+                        className=" px-6 btn-skeuo-base border-primary/20 shadow-sm"
                       >
-                        <Heart className={cn("h-4 w-4", list.isLiked && "fill-destructive text-destructive")} />
-                        <span>{list.likeCount ?? 0}</span>
-                      </button>
-                      <span className="flex items-center gap-1">
-                        <MessageCircle className="h-4 w-4" /> {list.commentCount ?? 0}
+                        <Check className="mr-2 h-4 w-4" /> SAVE CHANGES
+                      </Button>
+                      <Button variant="outline" className=" btn-skeuo-base border-border shadow-sm" onClick={() => setEditing(false)}>CANCEL</Button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-3 mb-3 flex-wrap">
+                    {list.visibility === "public" ? (
+                      <span className=" bg-primary/20 border border-primary/30 px-2.5 py-1 text-xs font-bold text-primary uppercase tracking-widest font-mono">
+                        <Globe className="h-3 w-3 mr-1.5 inline-block" /> PUBLIC
                       </span>
-                    </>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-          {canEdit && !editing && (
-            <div className="flex gap-1 shrink-0">
-              <Button variant="ghost" size="icon" onClick={startEdit} title="Edit">
-                <Pencil className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-destructive hover:text-destructive/80"
-                onClick={() => { if (confirm("Delete this list? This cannot be undone.")) deleteMutation.mutate(); }}
-                title="Delete list"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+                    ) : (
+                      <span className=" bg-card border border-border px-2.5 py-1 text-xs font-bold text-foreground uppercase tracking-widest font-mono">
+                        <Lock className="h-3 w-3 mr-1.5 inline-block" /> PRIVATE
+                      </span>
+                    )}
+                    {list.isRanked && (
+                      <span className=" bg-card border border-border px-2.5 py-1 text-xs font-bold text-foreground uppercase tracking-widest font-mono">
+                        Ranked
+                      </span>
+                    )}
+                  </div>
+                  <h1 className="text-3xl md:text-5xl font-brand tracking-tight text-foreground mb-2 leading-tight truncate">
+                    {list.name}
+                  </h1>
+                  {list.description && <p className="text-muted-foreground max-w-2xl text-sm md:text-base leading-relaxed mb-4">{list.description}</p>}
+                  
+                  <div className="flex flex-wrap items-center gap-4 text-sm text-foreground">
+                    {list.owner && (
+                      <Link href={`/u/${list.owner.username}`}>
+                        <div className="flex items-center gap-2 hover:text-primary transition-colors cursor-pointer bg-card border border-border pr-3 pl-1 py-1 shadow-sm">
+                          <Avatar className="h-6 w-6  border border-border">
+                            <AvatarImage src={list.owner.avatarUrl} className="" />
+                            <AvatarFallback className="text-[10px] bg-primary/20 text-primary font-brand ">{list.owner.displayName[0]?.toUpperCase()}</AvatarFallback>
+                          </Avatar>
+                          <span className="font-bold">{list.owner.displayName}</span>
+                        </div>
+                      </Link>
+                    )}
+                    
+                    {(list.tags ?? []).length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {(list.tags ?? []).map((tag) => (
+                          <span key={tag} className=" bg-card border border-border px-2 py-1 text-xs font-mono font-bold text-foreground uppercase">#{tag}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
-          )}
-        </div>
-
-        {canEdit && !editing && (
-          <div className="mb-4 flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => setInviteOpen(true)}>
-              <UserPlus className="mr-1 h-3 w-3" /> Invite Collaborators
-            </Button>
-          </div>
-        )}
-
-        {list.collaborators.length > 0 && (
-          <div className="mb-6">
-            <h2 className="mb-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide">Collaborators</h2>
-            <div className="flex flex-wrap gap-2">
-              {list.collaborators.map((collab) => (
-                <div key={collab.userId} className="flex items-center gap-2 rounded-full border bg-card px-3 py-1.5">
-                  <Avatar className="h-5 w-5">
-                    <AvatarImage src={collab.user.avatarUrl} />
-                    <AvatarFallback>{collab.user.displayName[0]?.toUpperCase()}</AvatarFallback>
-                  </Avatar>
-                  <span className="text-sm">{collab.user.displayName}</span>
-                  {canEdit && (
-                    <button onClick={() => removeCollabMutation.mutate(collab.userId)} className="text-muted-foreground hover:text-destructive" title="Remove collaborator">
-                      <X className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {canContribute && (
-          <div className="mb-6">
-            <h2 className="mb-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide">Add Media</h2>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                className="pl-9"
-                placeholder="Search movies, books, music…"
-                value={searchQuery}
-                onChange={(e) => handleSearch(e.target.value)}
-              />
-            </div>
-            {searchLoading && (
-              <div className="mt-2 flex items-center justify-center py-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
+            
+            {!editing && (
+              <div className="flex items-center gap-3 shrink-0">
+                {list.visibility === "public" && currentUser && (
+                  <Button
+                    size="lg"
+                    variant={list.isLiked ? "default" : "outline"}
+                    className={cn(
+                      " shadow-sm transition-all duration-300 btn-skeuo-base",
+                      list.isLiked ? "bg-destructive text-destructive-foreground hover:bg-destructive/90 border-destructive" : "bg-card border-border hover:bg-muted text-foreground"
+                    )}
+                    onClick={() => (list.isLiked ? unlikeMutation.mutate() : likeMutation.mutate())}
+                  >
+                    <Heart className={cn("mr-2 h-5 w-5", list.isLiked ? "fill-current" : "")} />
+                    {list.likeCount ?? 0}
+                  </Button>
+                )}
+                
+                {canEdit && (
+                  <>
+                    <Button variant="outline" size="icon" className=" bg-card border-border shadow-sm hover:bg-muted text-foreground h-11 w-11 btn-skeuo-base" onClick={startEdit} title="Edit List">
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className=" bg-card border-border shadow-sm hover:bg-destructive hover:text-white hover:border-destructive text-foreground h-11 w-11 transition-colors btn-skeuo-base"
+                      onClick={() => { if (confirm("Delete this list? This cannot be undone.")) deleteMutation.mutate(); }}
+                      title="Delete list"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </>
+                )}
               </div>
             )}
-            {searchResults.length > 0 && (
-              <ul className="mt-2 space-y-1 rounded-md border bg-popover shadow-sm max-h-64 overflow-y-auto">
-                {searchResults.map((item, i) => (
-                  <li key={i}>
-                    <button
-                      className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-muted/60 transition-colors"
-                      onClick={() => handleAddMedia(item)}
-                      disabled={addItemMutation.isPending}
-                    >
-                      {item.coverUrl ? (
-                        <img src={item.coverUrl} alt={item.title} className="h-10 w-7 shrink-0 rounded object-cover" />
-                      ) : (
-                        <div className={cn("h-10 w-7 shrink-0 rounded bg-gradient-to-br", item.coverGradient ?? "from-slate-700 to-slate-900")} />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="truncate text-sm font-medium">{item.title}</p>
-                        <p className="truncate text-xs text-muted-foreground">{[item.type, item.year].filter(Boolean).join(" · ")}</p>
-                      </div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-5xl px-4 py-8">
+        {/* Collaborators & Add Media Section */}
+        {(canEdit || list.collaborators.length > 0 || canContribute) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+            {/* Collaborators */}
+            {(canEdit || list.collaborators.length > 0) && (
+              <div className="bg-card border border-border p-6 shadow-sm relative">
+                <div className="bg-noise absolute inset-0 z-0"></div>
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-sm font-mono font-bold text-muted-foreground uppercase tracking-widest">Collaborators</h2>
+                    {canEdit && !editing && (
+                      <Button size="sm" variant="outline" className=" h-8 btn-skeuo-base border-border" onClick={() => setInviteOpen(true)}>
+                        <UserPlus className="mr-2 h-3 w-3" /> INVITE
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {list.collaborators.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {list.collaborators.map((collab) => (
+                        <div key={collab.userId} className="flex items-center gap-2 border border-border bg-background pr-3 pl-1 py-1 shadow-sm">
+                          <Avatar className="h-6 w-6  border border-border">
+                            <AvatarImage src={collab.user.avatarUrl} className="" />
+                            <AvatarFallback className="text-[10px] bg-primary/20 text-primary font-brand ">{collab.user.displayName[0]?.toUpperCase()}</AvatarFallback>
+                          </Avatar>
+                          <span className="text-sm font-bold">{collab.user.displayName}</span>
+                          {canEdit && (
+                            <button onClick={() => removeCollabMutation.mutate(collab.userId)} className="ml-1 text-muted-foreground hover:text-destructive transition-colors" title="Remove collaborator">
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground font-mono uppercase">No collaborators yet.</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Add Media */}
+            {canContribute && (
+              <div className="bg-card border border-border p-6 shadow-sm relative">
+                <div className="bg-noise absolute inset-0 z-0"></div>
+                <div className="relative z-10">
+                  <h2 className="mb-4 text-sm font-mono font-bold text-muted-foreground uppercase tracking-widest">Add Media</h2>
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      className="pl-11 bg-background border-border h-12  shadow-inner"
+                      placeholder="Search movies, books, music…"
+                      value={searchQuery}
+                      onChange={(e) => handleSearch(e.target.value)}
+                    />
+                  </div>
+                  {searchLoading && (
+                    <div className="mt-4 flex items-center justify-center text-primary">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    </div>
+                  )}
+                  {searchResults.length > 0 && (
+                    <ul className="mt-3 space-y-1 border border-border bg-card shadow-xl max-h-64 overflow-y-auto p-2 absolute z-50 w-full md:w-[calc(50%-1.5rem)] max-w-[calc(100vw-2rem)]">
+                      {searchResults.map((item, i) => (
+                        <li key={i}>
+                          <button
+                            className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-muted transition-colors border border-transparent hover:border-border"
+                            onClick={() => handleAddMedia(item)}
+                            disabled={addItemMutation.isPending}
+                          >
+                            {item.coverUrl ? (
+                              <img src={item.coverUrl} alt={item.title} className="h-12 w-8 shrink-0 object-cover shadow-sm border border-border" />
+                            ) : (
+                              <div className={cn("h-12 w-8 shrink-0 shadow-sm bg-gradient-to-br border border-border", item.coverGradient ?? "from-slate-700 to-slate-900")} />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="truncate text-sm font-bold text-foreground">{item.title}</p>
+                              <p className="truncate text-xs font-mono uppercase text-muted-foreground">{[item.type, item.year].filter(Boolean).join(" · ")}</p>
+                            </div>
+                            <Plus className="h-4 w-4 text-primary opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         )}
 
-        <div>
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Items ({list.items.length})</h2>
-            <div className="flex gap-1">
-              <Button
-                size="sm"
-                variant={viewMode === "grid" ? "default" : "ghost"}
-                onClick={() => setViewMode("grid")}
-                className="h-7 px-2"
-                title="Grid view"
-                aria-label="Grid view"
-              >
-                <LayoutGrid className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                size="sm"
-                variant={viewMode === "list" ? "default" : "ghost"}
-                onClick={() => setViewMode("list")}
-                className="h-7 px-2"
-                title="List view"
-                aria-label="List view"
-              >
-                <ListIcon className="h-3.5 w-3.5" />
-              </Button>
+        {/* Items Section */}
+        <div className="mb-12">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-border pb-2">
+            <h2 className="text-xl font-brand tracking-tight">
+              ITEMS <span className="text-muted-foreground font-mono text-base ml-2">({list.items.length})</span>
+            </h2>
+            
+            <div className="flex items-center gap-3">
+              {showSort && (
+                <select
+                  value={sortKey}
+                  onChange={(e) => setSortKey(e.target.value as SortKey)}
+                  aria-label="Sort items"
+                  className="h-9 border border-border bg-card px-4 text-sm font-bold text-foreground outline-none focus:ring-2 focus:ring-primary cursor-pointer font-mono uppercase "
+                >
+                  <option value="order" className="bg-background">Custom Order</option>
+                  <option value="title" className="bg-background">Title</option>
+                  <option value="year" className="bg-background">Year</option>
+                  <option value="type" className="bg-background">Type</option>
+                  <option value="date" className="bg-background">Date Added</option>
+                </select>
+              )}
+              
+              <div className="flex bg-card border border-border p-1 shadow-sm">
+                <Button
+                  size="sm"
+                  variant={viewMode === "grid" ? "default" : "ghost"}
+                  onClick={() => setViewMode("grid")}
+                  className={cn("h-7 w-8 p-0 ", viewMode === "grid" ? "shadow-sm border border-primary/20" : "hover:bg-muted border border-transparent")}
+                  title="Grid view"
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant={viewMode === "list" ? "default" : "ghost"}
+                  onClick={() => setViewMode("list")}
+                  className={cn("h-7 w-8 p-0 ", viewMode === "list" ? "shadow-sm border border-primary/20" : "hover:bg-muted border border-transparent")}
+                  title="List view"
+                >
+                  <ListIcon className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-            {showSort && (
-              <select
-                value={sortKey}
-                onChange={(e) => setSortKey(e.target.value as SortKey)}
-                aria-label="Sort items"
-                title="Sort items"
-                className="h-7 rounded-md border bg-background px-2 text-xs"
-              >
-                <option value="order">List order</option>
-                <option value="title">Title</option>
-                <option value="year">Year</option>
-                <option value="type">Type</option>
-                <option value="date">Date added</option>
-              </select>
-            )}
           </div>
 
           {list.items.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Film className="mb-3 h-8 w-8 text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground">No items yet — add your first!</p>
+            <div className="py-16 text-center bg-card border border-border shadow-sm relative">
+              <div className="bg-noise absolute inset-0 z-0"></div>
+              <div className="relative z-10 flex flex-col items-center">
+                <div className="bg-primary/10 p-4 border border-primary/20 shadow-inner mb-4 w-fit">
+                  <Film className="h-8 w-8 text-primary" />
+                </div>
+                <p className="text-lg font-brand mb-1">No items yet</p>
+                <p className="text-sm text-muted-foreground font-mono uppercase">Search and add media to start building your list.</p>
+              </div>
             </div>
           )}
 
           {viewMode === "grid" && list.items.length > 0 && (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
               {sortedItems.map((item, index) => (
                 <div key={item.id} className="relative group">
                   <Link href={`/m/${item.mediaId}`}>
-                    <div className="aspect-[2/3] rounded-md overflow-hidden bg-muted">
+                    <div className="relative aspect-[2/3] overflow-hidden bg-card border border-border transition-all duration-500 group-hover:-translate-y-2 group-hover:shadow-[4px_4px_0_0_var(--color-border)]">
                       {item.media.coverUrl ? (
-                        <img src={item.media.coverUrl} alt={item.media.title} className="h-full w-full object-cover" />
+                        <img src={item.media.coverUrl} alt={item.media.title} className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
                       ) : (
                         <div className={cn("h-full w-full bg-gradient-to-br", item.media.coverGradient ?? "from-slate-700 to-slate-900")} />
                       )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity duration-300" />
+                      
                       {list.isRanked && (
-                        <div className="absolute top-1 left-1 rounded bg-black/70 text-white text-xs font-bold px-1.5 py-0.5">
-                          {index + 1}
+                        <div className="absolute top-0 left-0 bg-card border-b border-r border-border text-foreground text-xs font-brand px-3 py-1.5 z-10 shadow-sm">
+                          #{index + 1}
                         </div>
                       )}
                     </div>
-                    <p className="mt-1 truncate text-xs font-medium">{item.media.title}</p>
+                    <div className="mt-3 px-1 border-l-2 border-primary/50 pl-2">
+                      <p className="truncate text-sm font-bold text-foreground group-hover:text-primary transition-colors">{item.media.title}</p>
+                      {item.media.year && (
+                        <p className="truncate text-xs font-mono uppercase text-muted-foreground mt-0.5">{item.media.year}</p>
+                      )}
+                    </div>
                   </Link>
                   {canContribute && (
-                    <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-300 scale-90 group-hover:scale-100 z-20">
                       <button
-                        onClick={() => removeItemMutation.mutate(item.mediaId)}
-                        className="rounded-full bg-black/60 p-1 text-white hover:bg-black/80"
+                        onClick={(e) => { e.preventDefault(); removeItemMutation.mutate(item.mediaId); }}
+                        className="bg-card p-2 text-foreground hover:bg-destructive hover:text-white shadow-sm border border-border transition-colors "
+                        title="Remove item"
                       >
-                        <X className="h-3 w-3" />
+                        <X className="h-4 w-4" />
                       </button>
                     </div>
                   )}
@@ -659,83 +746,85 @@ export default function ListDetail() {
           )}
 
           {viewMode === "list" && list.items.length > 0 && (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {sortedItems.map((item, index) => (
-                <div key={item.id} className="flex items-start gap-3 rounded-lg border bg-card px-3 py-2">
-                  <div className="flex flex-col gap-1 shrink-0">
-                    {canContribute && (
+                <div key={item.id} className="flex items-start gap-4 border border-border bg-card p-3 hover:bg-muted transition-colors group relative">
+                  <div className="flex flex-col gap-1 shrink-0 justify-center h-full pt-1">
+                    {canContribute && sortKey === "order" && (
                       <>
                         <button
                           onClick={() => handleMoveUp(index)}
                           disabled={index === 0 || reorderMutation.isPending}
-                          className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
-                          title="Move up"
-                          aria-label="Move up"
+                          className="p-1 border border-transparent hover:border-border text-muted-foreground hover:text-foreground hover:bg-background disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
                         >
                           <ChevronUp className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => handleMoveDown(index)}
                           disabled={index === sortedItems.length - 1 || reorderMutation.isPending}
-                          className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
-                          title="Move down"
-                          aria-label="Move down"
+                          className="p-1 border border-transparent hover:border-border text-muted-foreground hover:text-foreground hover:bg-background disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
                         >
                           <ChevronDown className="h-4 w-4" />
                         </button>
                       </>
                     )}
-                    {list.isRanked && !canContribute && (
-                      <span className="text-xs font-bold text-muted-foreground">{index + 1}</span>
+                    {list.isRanked && (!canContribute || sortKey !== "order") && (
+                      <span className="text-sm font-brand text-muted-foreground px-2">#{index + 1}</span>
                     )}
                   </div>
-                  <Link href={`/m/${item.mediaId}`}>
-                    {item.media.coverUrl ? (
-                      <img src={item.media.coverUrl} alt={item.media.title} className="h-12 w-8 shrink-0 rounded object-cover cursor-pointer" />
-                    ) : (
-                      <div className={cn("h-12 w-8 shrink-0 rounded bg-gradient-to-br cursor-pointer", item.media.coverGradient ?? "from-slate-700 to-slate-900")} />
-                    )}
+                  
+                  <Link href={`/m/${item.mediaId}`} className="shrink-0">
+                    <div className="overflow-hidden border border-border shadow-sm">
+                      {item.media.coverUrl ? (
+                        <img src={item.media.coverUrl} alt={item.media.title} className="h-20 w-14 object-cover transition-transform group-hover:scale-105" />
+                      ) : (
+                        <div className={cn("h-20 w-14 bg-gradient-to-br", item.media.coverGradient ?? "from-slate-700 to-slate-900")} />
+                      )}
+                    </div>
                   </Link>
-                  <div className="flex-1 min-w-0">
+                  
+                  <div className="flex-1 min-w-0 py-1">
                     <Link href={`/m/${item.mediaId}`}>
-                      <p className="truncate text-sm font-medium hover:underline cursor-pointer">{item.media.title}</p>
+                      <p className="text-base font-bold text-foreground hover:text-primary transition-colors truncate">{item.media.title}</p>
                     </Link>
-                    <p className="truncate text-xs text-muted-foreground">
+                    <p className="text-xs font-mono uppercase text-muted-foreground mt-0.5">
                       {[item.media.type, item.media.year].filter(Boolean).join(" · ")}
                     </p>
+                    
                     {editingNoteMediaId === item.mediaId ? (
-                      <div className="mt-2 flex gap-1">
+                      <div className="mt-3 flex gap-2 max-w-md">
                         <Input
                           value={editingNoteValue}
                           onChange={(e) => setEditingNoteValue(e.target.value)}
-                          placeholder="Note for this item"
-                          className="h-8 text-xs"
+                          placeholder="Add a note..."
+                          className="h-9 text-sm bg-background border-border  shadow-inner"
                         />
-                        <Button size="sm" className="h-8" onClick={() => updateNoteMutation.mutate({ mediaId: item.mediaId, note: editingNoteValue.trim() || null })}>
-                          <Check className="h-3 w-3" />
+                        <Button size="sm" className="h-9 px-3  btn-skeuo-base border-primary/20" onClick={() => updateNoteMutation.mutate({ mediaId: item.mediaId, note: editingNoteValue.trim() || null })}>
+                          SAVE
                         </Button>
-                        <Button size="sm" variant="ghost" className="h-8" onClick={() => setEditingNoteMediaId(null)}>
-                          <X className="h-3 w-3" />
+                        <Button size="sm" variant="outline" className="h-9 px-3  btn-skeuo-base border-border" onClick={() => setEditingNoteMediaId(null)}>
+                          CANCEL
                         </Button>
                       </div>
                     ) : (
-                      <>
-                        {item.note && <p className="mt-1 text-xs text-muted-foreground italic">{item.note}</p>}
+                      <div className="mt-2">
+                        {item.note && <p className="text-sm text-foreground/80 font-mono border-l-2 border-primary/50 pl-3 py-0.5 bg-background/50">{item.note}</p>}
                         {canContribute && (
-                          <button onClick={() => startEditNote(item)} className="mt-1 text-xs text-muted-foreground hover:underline">
-                            {item.note ? "Edit note" : "Add note"}
+                          <button onClick={() => startEditNote(item)} className="mt-1.5 text-xs font-mono font-bold text-primary/70 hover:text-primary transition-colors uppercase">
+                            {item.note ? "EDIT NOTE" : "+ ADD NOTE"}
                           </button>
                         )}
-                      </>
+                      </div>
                     )}
                   </div>
+                  
                   {canContribute && (
                     <button
                       onClick={() => removeItemMutation.mutate(item.mediaId)}
-                      className="shrink-0 text-muted-foreground hover:text-destructive"
+                      className="shrink-0 p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 border border-transparent hover:border-destructive transition-colors opacity-0 group-hover:opacity-100"
                       title="Remove item"
                     >
-                      <X className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   )}
                 </div>
@@ -744,55 +833,75 @@ export default function ListDetail() {
           )}
         </div>
 
+        {/* Comments Section */}
         {list.visibility === "public" && (
-          <div className="mt-8 pt-6 border-t">
-            <h2 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wide">Comments</h2>
+          <div className="mt-16 pt-10 border-t border-border">
+            <div className="flex items-center gap-2 mb-6">
+              <MessageCircle className="h-5 w-5 text-primary" />
+              <h2 className="text-xl font-brand tracking-tight uppercase">
+                Comments <span className="text-muted-foreground font-mono text-base">({comments.length})</span>
+              </h2>
+            </div>
+            
             {currentUser && (
-              <div className="mb-4 flex gap-2">
-                <Textarea
-                  placeholder="Add a comment…"
-                  value={commentBody}
-                  onChange={(e) => setCommentBody(e.target.value)}
-                  rows={2}
-                  className="resize-none"
-                />
-                <Button
-                  size="sm"
-                  disabled={!commentBody.trim() || addCommentMutation.isPending}
-                  onClick={() => addCommentMutation.mutate(commentBody.trim())}
-                >
-                  Post
-                </Button>
+              <div className="mb-8 flex gap-4 bg-card p-4 border border-border shadow-sm relative">
+                <div className="bg-noise absolute inset-0 z-0"></div>
+                <Avatar className="h-10 w-10 shrink-0 border border-border  relative z-10">
+                  <AvatarImage src={currentUser.avatarUrl} className="" />
+                  <AvatarFallback className="bg-primary/20 text-primary font-brand ">{currentUser.displayName[0]?.toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1 flex flex-col gap-3 relative z-10">
+                  <Textarea
+                    placeholder="Share your thoughts on this list..."
+                    value={commentBody}
+                    onChange={(e) => setCommentBody(e.target.value)}
+                    rows={3}
+                    className="resize-none bg-background border-border shadow-inner focus-visible:ring-primary "
+                  />
+                  <div className="flex justify-end">
+                    <Button
+                      className=" px-6 btn-skeuo-base border border-primary/20 shadow-sm"
+                      disabled={!commentBody.trim() || addCommentMutation.isPending}
+                      onClick={() => addCommentMutation.mutate(commentBody.trim())}
+                    >
+                      POST COMMENT
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
-            {comments.length === 0 && (
-              <p className="text-sm text-muted-foreground">No comments yet.</p>
+            
+            {comments.length === 0 && !currentUser && (
+              <p className="text-muted-foreground text-center py-8 bg-card border border-border font-mono text-sm uppercase shadow-sm">Sign in to leave a comment.</p>
             )}
-            <div className="space-y-3">
+            
+            <div className="space-y-6">
               {comments.map((c) => (
-                <div key={c.id} className="flex gap-3">
-                  <Avatar className="h-8 w-8 shrink-0">
-                    <AvatarImage src={c.user.avatarUrl} />
-                    <AvatarFallback>{c.user.displayName[0]?.toUpperCase()}</AvatarFallback>
+                <div key={c.id} className="flex gap-4 group">
+                  <Avatar className="h-10 w-10 shrink-0 border border-border  shadow-sm">
+                    <AvatarImage src={c.user.avatarUrl} className="" />
+                    <AvatarFallback className="bg-primary/10 text-primary font-brand ">{c.user.displayName[0]?.toUpperCase()}</AvatarFallback>
                   </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Link href={`/u/${c.user.username}`}>
-                        <span className="text-sm font-medium hover:underline cursor-pointer">{c.user.displayName}</span>
-                      </Link>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(c.createdAt).toLocaleDateString()}
-                      </span>
+                  <div className="flex-1 min-w-0 bg-card p-4 border border-border shadow-sm relative">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <Link href={`/u/${c.user.username}`}>
+                          <span className="text-sm font-bold hover:text-primary transition-colors cursor-pointer">{c.user.displayName}</span>
+                        </Link>
+                        <span className="text-xs font-mono uppercase text-muted-foreground">
+                          {new Date(c.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      </div>
                       {currentUser?.id === c.userId && (
                         <button
                           onClick={() => deleteCommentMutation.mutate(c.id)}
-                          className="text-xs text-muted-foreground hover:text-destructive"
+                          className="text-xs font-mono uppercase text-destructive/70 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                           Delete
                         </button>
                       )}
                     </div>
-                    <p className="text-sm mt-0.5">{c.body}</p>
+                    <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{c.body}</p>
                   </div>
                 </div>
               ))}

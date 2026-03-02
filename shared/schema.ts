@@ -294,6 +294,121 @@ export const listInvitations = pgTable("list_invitations", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Tier lists: separate list type for ranking items in customizable tiers
+export const tierLists = pgTable("tier_lists", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  ownerId: varchar("owner_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description").default(""),
+  visibility: text("visibility").notNull().default("private"),
+  tags: text("tags").array().default(sql`'{}'::text[]`),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const tierListTiers = pgTable("tier_list_tiers", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  tierListId: varchar("tier_list_id", { length: 36 })
+    .notNull()
+    .references(() => tierLists.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  color: text("color").notNull().default("#94a3b8"),
+  position: integer("position").notNull().default(0),
+});
+
+export const tierListItems = pgTable(
+  "tier_list_items",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    tierListId: varchar("tier_list_id", { length: 36 })
+      .notNull()
+      .references(() => tierLists.id, { onDelete: "cascade" }),
+    mediaId: varchar("media_id", { length: 36 }).notNull().references(() => media.id, { onDelete: "cascade" }),
+    tierId: varchar("tier_id", { length: 36 }).references(() => tierListTiers.id, { onDelete: "set null" }),
+    addedByUserId: varchar("added_by_user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+    position: integer("position").notNull().default(0),
+    note: text("note"),
+    addedAt: timestamp("added_at").defaultNow().notNull(),
+  },
+  (t) => [unique("tier_list_items_list_media_unique").on(t.tierListId, t.mediaId)],
+);
+
+export const tierListCollaborators = pgTable("tier_list_collaborators", {
+  tierListId: varchar("tier_list_id", { length: 36 }).notNull().references(() => tierLists.id, { onDelete: "cascade" }),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+}, (t) => [primaryKey({ columns: [t.tierListId, t.userId] })]);
+
+export const tierListInvitations = pgTable("tier_list_invitations", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  tierListId: varchar("tier_list_id", { length: 36 }).notNull().references(() => tierLists.id, { onDelete: "cascade" }),
+  invitedUserId: varchar("invited_user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  invitedByUserId: varchar("invited_by_user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const tierListLikes = pgTable(
+  "tier_list_likes",
+  {
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tierListId: varchar("tier_list_id", { length: 36 })
+      .notNull()
+      .references(() => tierLists.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.tierListId] })],
+);
+
+export const tierListComments = pgTable("tier_list_comments", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  tierListId: varchar("tier_list_id", { length: 36 })
+    .notNull()
+    .references(() => tierLists.id, { onDelete: "cascade" }),
+  userId: varchar("user_id", { length: 36 })
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Preset lists are virtual (API-driven); presetListId is the slug (e.g. "imdb-top-250")
+export const presetListLikes = pgTable(
+  "preset_list_likes",
+  {
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    presetListId: text("preset_list_id").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.presetListId] })],
+);
+
+export const presetListComments = pgTable("preset_list_comments", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  presetListId: text("preset_list_id").notNull(),
+  userId: varchar("user_id", { length: 36 })
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const userPresetProgress = pgTable(
+  "user_preset_progress",
+  {
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    presetListId: text("preset_list_id").notNull(),
+    externalId: text("external_id").notNull(),
+    completedAt: timestamp("completed_at").defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.presetListId, t.externalId] })],
+);
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
@@ -341,3 +456,29 @@ export type ListComment = typeof listComments.$inferSelect;
 export type InsertList = z.infer<typeof insertListSchema>;
 export type InsertListItem = z.infer<typeof insertListItemSchema>;
 export type InsertListInvitation = z.infer<typeof insertListInvitationSchema>;
+
+export const insertTierListSchema = createInsertSchema(tierLists).omit({ id: true, createdAt: true });
+export const insertTierListTierSchema = createInsertSchema(tierListTiers).omit({ id: true });
+export const insertTierListItemSchema = createInsertSchema(tierListItems).omit({ id: true, addedAt: true });
+export const insertTierListInvitationSchema = createInsertSchema(tierListInvitations).omit({ id: true, createdAt: true });
+
+export type TierList = typeof tierLists.$inferSelect;
+export type TierListTier = typeof tierListTiers.$inferSelect;
+export type TierListItem = typeof tierListItems.$inferSelect;
+export type TierListCollaborator = typeof tierListCollaborators.$inferSelect;
+export type TierListInvitation = typeof tierListInvitations.$inferSelect;
+export type TierListLike = typeof tierListLikes.$inferSelect;
+export type TierListComment = typeof tierListComments.$inferSelect;
+export type InsertTierList = z.infer<typeof insertTierListSchema>;
+export type InsertTierListTier = z.infer<typeof insertTierListTierSchema>;
+export type InsertTierListItem = z.infer<typeof insertTierListItemSchema>;
+export type InsertTierListInvitation = z.infer<typeof insertTierListInvitationSchema>;
+
+export const insertPresetListCommentSchema = createInsertSchema(presetListComments).omit({
+  id: true,
+  createdAt: true,
+});
+export type PresetListLike = typeof presetListLikes.$inferSelect;
+export type PresetListComment = typeof presetListComments.$inferSelect;
+export type UserPresetProgress = typeof userPresetProgress.$inferSelect;
+export type InsertPresetListComment = z.infer<typeof insertPresetListCommentSchema>;

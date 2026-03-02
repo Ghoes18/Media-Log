@@ -1,5 +1,9 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import type { Server } from "node:http";
+import path from "path";
+import fs from "fs";
+import { randomUUID } from "crypto";
+import multer from "multer";
 import { storage } from "./storage";
 import { authMiddleware } from "./auth";
 import { pushToUser } from "./ws";
@@ -15,6 +19,11 @@ import {
 } from "./tmdb";
 import { searchRawgGames, getTrendingGames, getDiscoverGames, getRawgGameDetails, getRawgGamesByDeveloper } from "./rawg";
 import { getImdbRatingByImdbId, getImdbTop250List, pickRandomFromImdbTop250 } from "./imdb";
+import {
+  PRESET_LISTS,
+  getPresetListById,
+  getPresetListItems,
+} from "./preset-lists";
 
 type RequestWithAuth = Request & { authUserId?: string; authPayload?: { name?: string; email?: string } };
 
@@ -1332,6 +1341,508 @@ export async function registerRoutes(
     } catch (err: any) {
       res.status(400).json({ message: err.message });
     }
+  });
+
+  // ── Image upload (for tier list custom images) ─────────────────────────────────
+  const UPLOAD_DIR = path.join(process.cwd(), "uploads");
+  const ALLOWED_MIMES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+  const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+
+  if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+  const upload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+      filename: (_req, file, cb) => {
+        const ext = file.mimetype === "image/png" ? "png" : file.mimetype === "image/webp" ? "webp" : file.mimetype === "image/gif" ? "gif" : "jpg";
+        cb(null, `${randomUUID()}.${ext}`);
+      },
+    }),
+    limits: { fileSize: MAX_SIZE },
+    fileFilter: (_req, file, cb) => {
+      if (ALLOWED_MIMES.includes(file.mimetype)) cb(null, true);
+      else cb(new Error("Invalid file type. Use JPEG, PNG, WebP, or GIF."));
+    },
+  });
+
+  app.use("/uploads", express.static(UPLOAD_DIR));
+
+  app.post("/api/upload/image", requireAuth, upload.single("file"), async (req, res) => {
+    const file = (req as Request & { file?: { path: string; filename: string } }).file;
+    if (!file) return res.status(400).json({ message: "No file uploaded" });
+    const coverUrl = `/uploads/${file.filename}`;
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const media = await storage.ensureMedia({
+      type: "custom",
+      title: `Uploaded image ${file.filename}`,
+      creator: "",
+      year: "",
+      coverUrl,
+      coverGradient: "from-slate-700 to-slate-900",
+      synopsis: "",
+      tags: [],
+      rating: "",
+      externalId: `upload:${file.filename}`,
+    });
+    res.status(201).json(media);
+  });
+
+  // ── Tier Lists ───────────────────────────────────────────────────────────────
+
+  async function requireTierListAccess(
+    tierListId: string,
+    appUser: { id: string },
+    options: { allowPublic?: boolean } = {},
+  ): Promise<{ tierList: NonNullable<Awaited<ReturnType<typeof storage.getTierList>>>; canEdit: boolean }> {
+    const tierList = await storage.getTierList(tierListId);
+    if (!tierList) throw new Error("Tier list not found");
+    const isOwner = tierList.ownerId === appUser.id;
+    if (isOwner) return { tierList, canEdit: true };
+    if (options.allowPublic && tierList.visibility === "public") return { tierList, canEdit: false };
+    const collabs = await storage.getTierListCollaborators(tierListId);
+    const isCollab = collabs.some((c) => c.userId === appUser.id);
+    if (!isCollab) throw new Error("Forbidden");
+    return { tierList, canEdit: true };
+  }
+
+  app.get("/api/tier-lists/public", async (req, res) => {
+    const sort = (req.query.sort as string) || "recent";
+    const page = parseInt(req.query.page as string) || 0;
+    const limit = parseInt(req.query.limit as string) || 24;
+    const validSort = sort === "popular" ? "popular" : "recent";
+    const lists = await storage.getPublicTierLists({ sort: validSort, page, limit });
+    res.json(lists);
+  });
+
+  app.get("/api/tier-lists", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const lists = await storage.getUserTierLists(appUser.id);
+    res.json(lists);
+  });
+
+  app.post("/api/tier-lists", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const { name, description, visibility, tags } = req.body as {
+      name?: string; description?: string; visibility?: string; tags?: string[];
+    };
+    if (!name?.trim()) return res.status(400).json({ message: "name is required" });
+    const list = await storage.createTierList(appUser.id, {
+      name: name.trim().slice(0, 100),
+      description: description?.trim().slice(0, 500) ?? "",
+      visibility: visibility === "public" ? "public" : "private",
+      tags: Array.isArray(tags) ? tags.slice(0, 10).filter((t): t is string => typeof t === "string") : undefined,
+    });
+    res.status(201).json(list);
+  });
+
+  app.get("/api/tier-lists/:id", async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const authUserId = authReq.authUserId;
+    let appUser: { id: string } | null = null;
+    if (authUserId) appUser = await storage.getOrCreateAppUser(authUserId, {});
+
+    const tierList = await storage.getTierList(req.params.id as string);
+    if (!tierList) return res.status(404).json({ message: "Tier list not found" });
+
+    const isOwner = appUser ? tierList.ownerId === appUser.id : false;
+    if (!isOwner) {
+      if (tierList.visibility !== "public") {
+        if (!appUser) return res.status(401).json({ message: "Sign in to view this list" });
+        const collabs = await storage.getTierListCollaborators(tierList.id);
+        if (!collabs.some((c) => c.userId === appUser!.id)) return res.status(403).json({ message: "Forbidden" });
+      }
+    }
+
+    const detail = await storage.getTierListDetail(tierList.id, appUser?.id);
+    if (!detail) return res.status(404).json({ message: "Tier list not found" });
+    res.json(detail);
+  });
+
+  app.patch("/api/tier-lists/:id", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const { tierList } = await requireTierListAccess(req.params.id as string, appUser);
+    if (tierList.ownerId !== appUser.id) return res.status(403).json({ message: "Only owner can update list metadata" });
+
+    const { name, description, visibility, tags } = req.body as Partial<{ name: string; description: string; visibility: string; tags: string[] }>;
+    const data: Record<string, unknown> = {};
+    if (typeof name === "string") data.name = name.trim().slice(0, 100);
+    if (typeof description === "string") data.description = description.trim().slice(0, 500);
+    if (visibility === "public" || visibility === "private") data.visibility = visibility;
+    if (Array.isArray(tags)) data.tags = tags.slice(0, 10).filter((t): t is string => typeof t === "string");
+
+    const updated = await storage.updateTierList(tierList.id, data as any);
+    res.json(updated);
+  });
+
+  app.delete("/api/tier-lists/:id", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const { tierList } = await requireTierListAccess(req.params.id as string, appUser);
+    if (tierList.ownerId !== appUser.id) return res.status(403).json({ message: "Only owner can delete" });
+    await storage.deleteTierList(tierList.id);
+    res.json({ ok: true });
+  });
+
+  app.post("/api/tier-lists/:id/tiers", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    await requireTierListAccess(req.params.id as string, appUser);
+    const { label, color, position } = req.body as { label?: string; color?: string; position?: number };
+    if (!label?.trim()) return res.status(400).json({ message: "label is required" });
+    const tier = await storage.createTier(req.params.id as string, {
+      label: label.trim().slice(0, 20),
+      color: color?.trim().slice(0, 20) || "#94a3b8",
+      position,
+    });
+    res.status(201).json(tier);
+  });
+
+  app.patch("/api/tier-lists/:id/tiers/:tierId", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    await requireTierListAccess(req.params.id as string, appUser);
+    const { label, color, position } = req.body as { label?: string; color?: string; position?: number };
+    const data: Record<string, unknown> = {};
+    if (typeof label === "string") data.label = label.trim().slice(0, 20);
+    if (typeof color === "string") data.color = color.trim().slice(0, 20);
+    if (typeof position === "number") data.position = position;
+    if (Object.keys(data).length === 0) return res.status(400).json({ message: "No updates provided" });
+    const updated = await storage.updateTier(req.params.tierId as string, data as any);
+    res.json(updated);
+  });
+
+  app.put("/api/tier-lists/:id/tiers/reorder", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    await requireTierListAccess(req.params.id as string, appUser);
+    const { tierIds } = req.body as { tierIds?: string[] };
+    if (!Array.isArray(tierIds) || tierIds.length === 0) return res.status(400).json({ message: "tierIds array required" });
+    await storage.reorderTiers(req.params.id as string, tierIds);
+    res.json({ ok: true });
+  });
+
+  app.delete("/api/tier-lists/:id/tiers/:tierId", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    await requireTierListAccess(req.params.id as string, appUser);
+    await storage.deleteTier(req.params.tierId as string);
+    res.json({ ok: true });
+  });
+
+  app.post("/api/tier-lists/:id/items", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    await requireTierListAccess(req.params.id as string, appUser);
+    const { mediaId, tierId, position, note } = req.body as { mediaId?: string; tierId?: string | null; position?: number; note?: string };
+    if (!mediaId) return res.status(400).json({ message: "mediaId is required" });
+    const item = await storage.addTierListItem(
+      req.params.id as string,
+      mediaId,
+      appUser.id,
+      tierId ?? null,
+      position,
+      note?.trim(),
+    );
+    res.status(201).json(item);
+  });
+
+  app.patch("/api/tier-lists/:id/items/:itemId/move", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    await requireTierListAccess(req.params.id as string, appUser);
+    const { tierId, position } = req.body as { tierId?: string | null; position: number };
+    if (typeof position !== "number" || position < 0) return res.status(400).json({ message: "position is required and must be >= 0" });
+    await storage.moveTierListItem(req.params.itemId as string, tierId ?? null, position);
+    res.json({ ok: true });
+  });
+
+  app.patch("/api/tier-lists/:id/items/:itemId", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    await requireTierListAccess(req.params.id as string, appUser);
+    const { note } = req.body as { note?: string | null };
+    await storage.updateTierListItemNote(req.params.id as string, req.params.itemId as string, note ?? null);
+    res.json({ ok: true });
+  });
+
+  app.delete("/api/tier-lists/:id/items/:itemId", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    await requireTierListAccess(req.params.id as string, appUser);
+    await storage.removeTierListItem(req.params.id as string, req.params.itemId as string);
+    res.json({ ok: true });
+  });
+
+  app.post("/api/tier-lists/:id/like", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const tierList = await storage.getTierList(req.params.id as string);
+    if (!tierList) return res.status(404).json({ message: "Tier list not found" });
+    if (tierList.visibility !== "public") return res.status(403).json({ message: "Cannot like private list" });
+    await storage.likeTierList(appUser.id, req.params.id as string);
+    res.json({ ok: true });
+  });
+
+  app.delete("/api/tier-lists/:id/like", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    await storage.unlikeTierList(appUser.id, req.params.id as string);
+    res.json({ ok: true });
+  });
+
+  app.get("/api/tier-lists/:id/comments", async (req, res) => {
+    const tierList = await storage.getTierList(req.params.id as string);
+    if (!tierList) return res.status(404).json({ message: "Tier list not found" });
+    if (tierList.visibility !== "public") return res.status(403).json({ message: "Forbidden" });
+    const comments = await storage.getTierListComments(req.params.id as string);
+    res.json(comments);
+  });
+
+  app.post("/api/tier-lists/:id/comments", requireAuth, async (req, res) => {
+    const tierList = await storage.getTierList(req.params.id as string);
+    if (!tierList) return res.status(404).json({ message: "Tier list not found" });
+    if (tierList.visibility !== "public") return res.status(403).json({ message: "Forbidden" });
+    const { body } = req.body as { body?: string };
+    if (!body?.trim()) return res.status(400).json({ message: "body required" });
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const comment = await storage.createTierListComment(req.params.id as string, appUser.id, body.trim().slice(0, 1000));
+    res.status(201).json(comment);
+  });
+
+  app.delete("/api/tier-lists/:id/comments/:commentId", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    try {
+      await storage.deleteTierListComment(req.params.commentId as string, appUser.id);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(err.message === "Forbidden" ? 403 : 404).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/tier-lists/:id/invitations", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const { tierList } = await requireTierListAccess(req.params.id as string, appUser);
+    if (tierList.ownerId !== appUser.id) return res.status(403).json({ message: "Only owner can invite" });
+    const { invitedUserId } = req.body as { invitedUserId?: string };
+    if (!invitedUserId) return res.status(400).json({ message: "invitedUserId is required" });
+    if (invitedUserId === appUser.id) return res.status(400).json({ message: "Cannot invite yourself" });
+    const inv = await storage.createTierListInvitation(tierList.id, invitedUserId, appUser.id);
+    pushToUser(invitedUserId, {
+      type: "list_invitation",
+      payload: {
+        invitationId: inv.id,
+        listId: tierList.id,
+        listName: tierList.name,
+        invitedByDisplayName: appUser.displayName,
+      },
+    });
+    res.status(201).json(inv);
+  });
+
+  app.get("/api/tier-lists/:id/invitations", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const { tierList } = await requireTierListAccess(req.params.id as string, appUser);
+    if (tierList.ownerId !== appUser.id) return res.status(403).json({ message: "Forbidden" });
+    const invitations = await storage.getTierListInvitations(tierList.id);
+    res.json(invitations);
+  });
+
+  app.delete("/api/tier-lists/:id/collaborators/:userId", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const { tierList } = await requireTierListAccess(req.params.id as string, appUser);
+    if (tierList.ownerId !== appUser.id) return res.status(403).json({ message: "Forbidden" });
+    await storage.removeTierListCollaborator(tierList.id, req.params.userId as string);
+    res.json({ ok: true });
+  });
+
+  app.get("/api/tier-list-invitations", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const invitations = await storage.getTierListInvitationsForUser(appUser.id);
+    res.json(invitations);
+  });
+
+  app.patch("/api/tier-list-invitations/:id/accept", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    try {
+      const inv = await storage.respondToTierListInvitation(req.params.id as string, appUser.id, "accepted");
+      res.json(inv);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/tier-list-invitations/:id/decline", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    try {
+      const inv = await storage.respondToTierListInvitation(req.params.id as string, appUser.id, "declined");
+      res.json(inv);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  // --- Preset lists (curated) ---
+  app.get("/api/preset-lists", async (_req, res) => {
+    const withCounts = await Promise.all(
+      PRESET_LISTS.map(async (def) => {
+        const [likeCount, items] = await Promise.all([
+          storage.getPresetListLikeCount(def.id),
+          getPresetListItems(def.id),
+        ]);
+        const coverUrls = items
+          .slice(0, 5)
+          .map((m) => m.coverUrl)
+          .filter(Boolean);
+        return {
+          id: def.id,
+          name: def.name,
+          description: def.description,
+          mediaType: def.mediaType,
+          icon: def.icon,
+          expectedCount: def.expectedCount,
+          likeCount,
+          coverUrls,
+        };
+      })
+    );
+    res.json(withCounts);
+  });
+
+  app.get("/api/preset-lists/:id", async (req, res) => {
+    const id = req.params.id as string;
+    const def = getPresetListById(id);
+    if (!def) return res.status(404).json({ message: "Preset list not found" });
+    const authReq = req as RequestWithAuth;
+    const appUserId = authReq.authUserId
+      ? (await storage.getOrCreateAppUser(authReq.authUserId, {})).id
+      : null;
+    const [items, likeCount, commentCount, hasLiked, progress] = await Promise.all([
+      getPresetListItems(id),
+      storage.getPresetListLikeCount(id),
+      storage.getPresetListCommentCount(id),
+      appUserId ? storage.hasLikedPresetList(appUserId, id) : Promise.resolve(false),
+      appUserId ? storage.getUserPresetProgress(appUserId, id) : Promise.resolve(new Set<string>()),
+    ]);
+    res.json({
+      ...def,
+      items,
+      likeCount,
+      commentCount,
+      hasLiked: hasLiked ?? false,
+      progress: Array.from(progress),
+    });
+  });
+
+  app.post("/api/preset-lists/:id/like", requireAuth, async (req, res) => {
+    const id = req.params.id as string;
+    if (!getPresetListById(id)) return res.status(404).json({ message: "Preset list not found" });
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    await storage.likePresetList(appUser.id, id);
+    res.status(204).end();
+  });
+
+  app.delete("/api/preset-lists/:id/like", requireAuth, async (req, res) => {
+    const id = req.params.id as string;
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    await storage.unlikePresetList(appUser.id, id);
+    res.status(204).end();
+  });
+
+  app.get("/api/preset-lists/:id/comments", async (req, res) => {
+    const id = req.params.id as string;
+    if (!getPresetListById(id)) return res.status(404).json({ message: "Preset list not found" });
+    const comments = await storage.getPresetListComments(id);
+    res.json(comments);
+  });
+
+  app.post("/api/preset-lists/:id/comments", requireAuth, async (req, res) => {
+    const id = req.params.id as string;
+    if (!getPresetListById(id)) return res.status(404).json({ message: "Preset list not found" });
+    const body = (req.body as { body?: string })?.body;
+    if (typeof body !== "string" || !body.trim()) return res.status(400).json({ message: "body required" });
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const comment = await storage.createPresetListComment(id, appUser.id, body.trim());
+    res.status(201).json(comment);
+  });
+
+  app.delete("/api/preset-lists/:id/comments/:commentId", requireAuth, async (req, res) => {
+    const { id, commentId } = req.params as { id: string; commentId: string };
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    try {
+      await storage.deletePresetListComment(commentId, appUser.id);
+      res.status(204).end();
+    } catch (err: any) {
+      res.status(err.message === "Forbidden" ? 403 : 404).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/preset-lists/:id/progress/:externalId", requireAuth, async (req, res) => {
+    const { id, externalId } = req.params as { id: string; externalId: string };
+    if (!getPresetListById(id)) return res.status(404).json({ message: "Preset list not found" });
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    await storage.markPresetProgress(appUser.id, id, decodeURIComponent(externalId));
+    res.status(204).end();
+  });
+
+  app.delete("/api/preset-lists/:id/progress/:externalId", requireAuth, async (req, res) => {
+    const { id, externalId } = req.params as { id: string; externalId: string };
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    await storage.unmarkPresetProgress(appUser.id, id, decodeURIComponent(externalId));
+    res.status(204).end();
+  });
+
+  app.post("/api/preset-lists/:id/fork", requireAuth, async (req, res) => {
+    const id = req.params.id as string;
+    const def = getPresetListById(id);
+    if (!def) return res.status(404).json({ message: "Preset list not found" });
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const items = await getPresetListItems(id);
+    const list = await storage.createList(appUser.id, {
+      name: `${def.name} (copy)`,
+      description: def.description || "",
+      visibility: "private",
+      isRanked: false,
+      tags: [],
+    });
+    for (const item of items) {
+      try {
+        const media = await storage.ensureMedia({
+          type: item.type,
+          title: item.title,
+          creator: item.creator,
+          year: item.year,
+          coverUrl: item.coverUrl,
+          coverGradient: "from-slate-700 to-slate-900",
+          synopsis: item.synopsis,
+          tags: item.tags,
+          rating: item.rating,
+          externalId: item.externalId,
+        });
+        await storage.addListItem(list.id, media.id, appUser.id, undefined);
+      } catch {
+        // skip items that fail to ensure
+      }
+    }
+    res.status(201).json(list);
   });
 
   return httpServer;

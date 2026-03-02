@@ -22,6 +22,16 @@ import {
   listInvitations,
   listLikes,
   listComments,
+  presetListLikes,
+  presetListComments,
+  userPresetProgress,
+  tierLists,
+  tierListTiers,
+  tierListItems,
+  tierListCollaborators,
+  tierListInvitations,
+  tierListLikes,
+  tierListComments,
   type User,
   type InsertUser,
   type Media,
@@ -37,6 +47,13 @@ import {
   type ListCollaborator,
   type ListInvitation,
   type ListComment,
+  type PresetListComment,
+  type TierList,
+  type TierListTier,
+  type TierListItem,
+  type TierListCollaborator,
+  type TierListInvitation,
+  type TierListComment,
 } from "@shared/schema";
 
 export interface ConversationWithDetails extends Conversation {
@@ -64,6 +81,38 @@ export interface ListItemWithDetails extends ListItem {
 
 export interface ListInvitationWithDetails extends ListInvitation {
   list: Pick<List, "id" | "name">;
+  invitedBy: UserStub;
+}
+
+export interface TierListWithMeta extends TierList {
+  owner: UserStub;
+  itemCount: number;
+  collaboratorCount: number;
+  isCollaborator: boolean;
+  likeCount?: number;
+  commentCount?: number;
+  coverUrls?: string[];
+}
+
+export interface TierListItemWithDetails extends TierListItem {
+  media: Media;
+  addedBy: UserStub;
+}
+
+export interface TierListDetail extends TierList {
+  owner: UserStub | null;
+  tiers: (TierListTier & { items: TierListItemWithDetails[] })[];
+  unassignedItems: TierListItemWithDetails[];
+  collaborators: (TierListCollaborator & { user: UserStub })[];
+  invitations: (TierListInvitation & { invitedUser: UserStub })[];
+  isOwner: boolean;
+  likeCount: number;
+  commentCount: number;
+  isLiked: boolean;
+}
+
+export interface TierListInvitationWithDetails extends TierListInvitation {
+  tierList: Pick<TierList, "id" | "name">;
   invitedBy: UserStub;
 }
 
@@ -184,6 +233,67 @@ export interface IStorage {
   getListInvitations(listId: string): Promise<(ListInvitation & { invitedUser: UserStub })[]>;
   respondToInvitation(id: string, userId: string, status: "accepted" | "declined"): Promise<ListInvitation>;
   getPendingInvitationCount(userId: string): Promise<number>;
+
+  // Tier lists
+  createTierList(ownerId: string, data: { name: string; description?: string; visibility?: string; tags?: string[] }): Promise<TierList>;
+  getTierList(id: string): Promise<TierList | undefined>;
+  getUserTierLists(userId: string): Promise<TierListWithMeta[]>;
+  updateTierList(id: string, data: Partial<Pick<TierList, "name" | "description" | "visibility" | "tags">>): Promise<TierList>;
+  deleteTierList(id: string): Promise<void>;
+  getTierListDetail(id: string, appUserId?: string | null): Promise<TierListDetail | undefined>;
+
+  // Tier list tiers
+  createTier(tierListId: string, data: { label: string; color?: string; position?: number }): Promise<TierListTier>;
+  updateTier(tierId: string, data: { label?: string; color?: string; position?: number }): Promise<TierListTier>;
+  deleteTier(tierId: string): Promise<void>;
+  reorderTiers(tierListId: string, tierIds: string[]): Promise<void>;
+  ensureDefaultTiers(tierListId: string): Promise<void>;
+
+  // Tier list items
+  addTierListItem(tierListId: string, mediaId: string, addedByUserId: string, tierId?: string | null, position?: number, note?: string): Promise<TierListItem>;
+  removeTierListItem(tierListId: string, itemId: string): Promise<void>;
+  moveTierListItem(itemId: string, toTierId: string | null, toPosition: number): Promise<void>;
+  updateTierListItemNote(tierListId: string, itemId: string, note: string | null): Promise<void>;
+  getTierListItems(tierListId: string): Promise<TierListItemWithDetails[]>;
+
+  // Tier list likes
+  likeTierList(userId: string, tierListId: string): Promise<void>;
+  unlikeTierList(userId: string, tierListId: string): Promise<void>;
+  hasLikedTierList(userId: string, tierListId: string): Promise<boolean>;
+  getTierListLikeCount(tierListId: string): Promise<number>;
+
+  // Tier list comments
+  getTierListComments(tierListId: string): Promise<(TierListComment & { user: UserStub })[]>;
+  createTierListComment(tierListId: string, userId: string, body: string): Promise<TierListComment>;
+  deleteTierListComment(commentId: string, userId: string): Promise<void>;
+  getTierListCommentCount(tierListId: string): Promise<number>;
+
+  // Tier list public
+  getPublicTierLists(options: { sort?: "popular" | "recent"; page?: number; limit?: number }): Promise<TierListWithMeta[]>;
+
+  // Tier list collaborators
+  getTierListCollaborators(tierListId: string): Promise<(TierListCollaborator & { user: UserStub })[]>;
+  removeTierListCollaborator(tierListId: string, userId: string): Promise<void>;
+
+  // Tier list invitations
+  createTierListInvitation(tierListId: string, invitedUserId: string, invitedByUserId: string): Promise<TierListInvitation>;
+  getTierListInvitationsForUser(userId: string): Promise<TierListInvitationWithDetails[]>;
+  getTierListInvitations(tierListId: string): Promise<(TierListInvitation & { invitedUser: UserStub })[]>;
+  respondToTierListInvitation(id: string, userId: string, status: "accepted" | "declined"): Promise<TierListInvitation>;
+  getPendingTierListInvitationCount(userId: string): Promise<number>;
+
+  // Preset list social (presetListId is slug e.g. "imdb-top-250")
+  likePresetList(userId: string, presetListId: string): Promise<void>;
+  unlikePresetList(userId: string, presetListId: string): Promise<void>;
+  hasLikedPresetList(userId: string, presetListId: string): Promise<boolean>;
+  getPresetListLikeCount(presetListId: string): Promise<number>;
+  getPresetListComments(presetListId: string): Promise<(PresetListComment & { user: UserStub })[]>;
+  createPresetListComment(presetListId: string, userId: string, body: string): Promise<PresetListComment>;
+  deletePresetListComment(commentId: string, userId: string): Promise<void>;
+  getPresetListCommentCount(presetListId: string): Promise<number>;
+  markPresetProgress(userId: string, presetListId: string, externalId: string): Promise<void>;
+  unmarkPresetProgress(userId: string, presetListId: string, externalId: string): Promise<void>;
+  getUserPresetProgress(userId: string, presetListId: string): Promise<Set<string>>;
 
   // User search
   searchUsers(query: string, excludeUserId?: string): Promise<UserStub[]>;
@@ -1159,6 +1269,100 @@ class DatabaseStorage implements IStorage {
     return row?.count ?? 0;
   }
 
+  async likePresetList(userId: string, presetListId: string): Promise<void> {
+    await db.insert(presetListLikes).values({ userId, presetListId }).onConflictDoNothing();
+  }
+
+  async unlikePresetList(userId: string, presetListId: string): Promise<void> {
+    await db
+      .delete(presetListLikes)
+      .where(and(eq(presetListLikes.userId, userId), eq(presetListLikes.presetListId, presetListId)));
+  }
+
+  async hasLikedPresetList(userId: string, presetListId: string): Promise<boolean> {
+    const [row] = await db
+      .select()
+      .from(presetListLikes)
+      .where(and(eq(presetListLikes.userId, userId), eq(presetListLikes.presetListId, presetListId)));
+    return !!row;
+  }
+
+  async getPresetListLikeCount(presetListId: string): Promise<number> {
+    const [row] = await db
+      .select({ count: count() })
+      .from(presetListLikes)
+      .where(eq(presetListLikes.presetListId, presetListId));
+    return row?.count ?? 0;
+  }
+
+  async getPresetListComments(presetListId: string): Promise<(PresetListComment & { user: UserStub })[]> {
+    const rows = await db
+      .select({
+        comment: presetListComments,
+        user: { id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl },
+      })
+      .from(presetListComments)
+      .innerJoin(users, eq(presetListComments.userId, users.id))
+      .where(eq(presetListComments.presetListId, presetListId))
+      .orderBy(asc(presetListComments.createdAt));
+    return rows.map((r) => ({ ...r.comment, user: r.user as UserStub }));
+  }
+
+  async createPresetListComment(presetListId: string, userId: string, body: string): Promise<PresetListComment> {
+    const [comment] = await db
+      .insert(presetListComments)
+      .values({ presetListId, userId, body })
+      .returning();
+    return comment;
+  }
+
+  async deletePresetListComment(commentId: string, userId: string): Promise<void> {
+    const [comment] = await db.select().from(presetListComments).where(eq(presetListComments.id, commentId));
+    if (!comment) throw new Error("Comment not found");
+    if (comment.userId !== userId) throw new Error("Forbidden");
+    await db.delete(presetListComments).where(eq(presetListComments.id, commentId));
+  }
+
+  async getPresetListCommentCount(presetListId: string): Promise<number> {
+    const [row] = await db
+      .select({ count: count() })
+      .from(presetListComments)
+      .where(eq(presetListComments.presetListId, presetListId));
+    return row?.count ?? 0;
+  }
+
+  async markPresetProgress(userId: string, presetListId: string, externalId: string): Promise<void> {
+    await db
+      .insert(userPresetProgress)
+      .values({ userId, presetListId, externalId })
+      .onConflictDoNothing();
+  }
+
+  async unmarkPresetProgress(userId: string, presetListId: string, externalId: string): Promise<void> {
+    await db
+      .delete(userPresetProgress)
+      .where(
+        and(
+          eq(userPresetProgress.userId, userId),
+          eq(userPresetProgress.presetListId, presetListId),
+          eq(userPresetProgress.externalId, externalId)
+        )
+      );
+  }
+
+  async getUserPresetProgress(userId: string, presetListId: string): Promise<Set<string>> {
+    const rows = await db
+      .select({ externalId: userPresetProgress.externalId })
+      .from(userPresetProgress)
+      .where(
+        and(
+          eq(userPresetProgress.userId, userId),
+          eq(userPresetProgress.presetListId, presetListId)
+        )
+      );
+    return new Set(rows.map((r) => r.externalId));
+  }
+
   async getPublicLists(options: { sort?: "popular" | "recent"; page?: number; limit?: number }): Promise<ListWithMeta[]> {
     const page = options.page ?? 0;
     const limit = Math.min(options.limit ?? 24, 50);
@@ -1335,6 +1539,487 @@ class DatabaseStorage implements IStorage {
         eq(listInvitations.invitedUserId, userId),
         eq(listInvitations.status, "pending"),
       ));
+    return row?.c ?? 0;
+  }
+
+  // ── Tier Lists ───────────────────────────────────────────────────────────────
+
+  private static DEFAULT_TIERS = [
+    { label: "S", color: "#ef4444" },
+    { label: "A", color: "#f97316" },
+    { label: "B", color: "#eab308" },
+    { label: "C", color: "#22c55e" },
+    { label: "D", color: "#64748b" },
+  ];
+
+  async createTierList(ownerId: string, data: { name: string; description?: string; visibility?: string; tags?: string[] }): Promise<TierList> {
+    const [list] = await db.insert(tierLists).values({
+      ownerId,
+      name: data.name,
+      description: data.description ?? "",
+      visibility: data.visibility ?? "private",
+      tags: data.tags ?? [],
+    }).returning();
+    await this.ensureDefaultTiers(list.id);
+    return list;
+  }
+
+  async getTierList(id: string): Promise<TierList | undefined> {
+    const [row] = await db.select().from(tierLists).where(eq(tierLists.id, id));
+    return row;
+  }
+
+  async ensureDefaultTiers(tierListId: string): Promise<void> {
+    const existing = await db.select().from(tierListTiers).where(eq(tierListTiers.tierListId, tierListId));
+    if (existing.length > 0) return;
+    for (let i = 0; i < DatabaseStorage.DEFAULT_TIERS.length; i++) {
+      const t = DatabaseStorage.DEFAULT_TIERS[i];
+      await db.insert(tierListTiers).values({
+        tierListId,
+        label: t.label,
+        color: t.color,
+        position: i,
+      });
+    }
+  }
+
+  async createTier(tierListId: string, data: { label: string; color?: string; position?: number }): Promise<TierListTier> {
+    const maxPos = await db
+      .select({ max: sql<number>`coalesce(max(${tierListTiers.position}), -1)` })
+      .from(tierListTiers)
+      .where(eq(tierListTiers.tierListId, tierListId));
+    const position = data.position ?? (maxPos[0]?.max ?? -1) + 1;
+    const [tier] = await db.insert(tierListTiers).values({
+      tierListId,
+      label: data.label,
+      color: data.color ?? "#94a3b8",
+      position,
+    }).returning();
+    return tier;
+  }
+
+  async updateTier(tierId: string, data: { label?: string; color?: string; position?: number }): Promise<TierListTier> {
+    const [updated] = await db.update(tierListTiers).set(data).where(eq(tierListTiers.id, tierId)).returning();
+    if (!updated) throw new Error("Tier not found");
+    return updated;
+  }
+
+  async deleteTier(tierId: string): Promise<void> {
+    await db.update(tierListItems).set({ tierId: null }).where(eq(tierListItems.tierId, tierId));
+    await db.delete(tierListTiers).where(eq(tierListTiers.id, tierId));
+  }
+
+  async reorderTiers(tierListId: string, tierIds: string[]): Promise<void> {
+    for (let i = 0; i < tierIds.length; i++) {
+      await db
+        .update(tierListTiers)
+        .set({ position: i })
+        .where(and(eq(tierListTiers.id, tierIds[i]), eq(tierListTiers.tierListId, tierListId)));
+    }
+  }
+
+  async addTierListItem(tierListId: string, mediaId: string, addedByUserId: string, tierId?: string | null, position?: number, note?: string): Promise<TierListItem> {
+    const existing = await db
+      .select()
+      .from(tierListItems)
+      .where(and(eq(tierListItems.tierListId, tierListId), eq(tierListItems.mediaId, mediaId)));
+    if (existing[0]) return existing[0];
+
+    const targetTierId = tierId ?? null;
+    let pos = position ?? 0;
+    if (pos === undefined || pos < 0) {
+      const maxPos = await db
+        .select({ max: sql<number>`coalesce(max(${tierListItems.position}), -1)` })
+        .from(tierListItems)
+        .where(and(eq(tierListItems.tierListId, tierListId), targetTierId ? eq(tierListItems.tierId, targetTierId) : isNull(tierListItems.tierId)));
+      pos = (maxPos[0]?.max ?? -1) + 1;
+    }
+
+    const [item] = await db.insert(tierListItems).values({
+      tierListId,
+      mediaId,
+      tierId: targetTierId,
+      addedByUserId,
+      position: pos,
+      note: note ?? null,
+    }).returning();
+    return item;
+  }
+
+  async removeTierListItem(tierListId: string, itemId: string): Promise<void> {
+    await db.delete(tierListItems).where(and(eq(tierListItems.id, itemId), eq(tierListItems.tierListId, tierListId)));
+  }
+
+  async moveTierListItem(itemId: string, toTierId: string | null, toPosition: number): Promise<void> {
+    await db.transaction(async (tx) => {
+      const [item] = await tx.select().from(tierListItems).where(eq(tierListItems.id, itemId));
+      if (!item) throw new Error("Item not found");
+
+      const sameScope = toTierId ? eq(tierListItems.tierId, toTierId) : isNull(tierListItems.tierId);
+      const allInTarget = await tx
+        .select()
+        .from(tierListItems)
+        .where(and(
+          eq(tierListItems.tierListId, item.tierListId),
+          or(sameScope, eq(tierListItems.id, itemId)),
+        ))
+        .orderBy(asc(tierListItems.position));
+
+      const others = allInTarget.filter((i) => i.id !== itemId);
+      const newOrder = [...others];
+      newOrder.splice(Math.min(toPosition, newOrder.length), 0, item);
+
+      for (let i = 0; i < newOrder.length; i++) {
+        await tx
+          .update(tierListItems)
+          .set({ tierId: toTierId, position: i })
+          .where(eq(tierListItems.id, newOrder[i].id));
+      }
+    });
+  }
+
+  async updateTierListItemNote(tierListId: string, itemId: string, note: string | null): Promise<void> {
+    await db
+      .update(tierListItems)
+      .set({ note })
+      .where(and(eq(tierListItems.id, itemId), eq(tierListItems.tierListId, tierListId)));
+  }
+
+  async getTierListItems(tierListId: string): Promise<TierListItemWithDetails[]> {
+    const rows = await db
+      .select({
+        item: tierListItems,
+        media: media,
+        addedBy: { id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl },
+      })
+      .from(tierListItems)
+      .innerJoin(media, eq(tierListItems.mediaId, media.id))
+      .innerJoin(users, eq(tierListItems.addedByUserId, users.id))
+      .where(eq(tierListItems.tierListId, tierListId))
+      .orderBy(asc(tierListItems.position));
+
+    return rows.map((r) => ({
+      ...r.item,
+      media: r.media,
+      addedBy: r.addedBy as UserStub,
+    }));
+  }
+
+  async getTierListDetail(id: string, appUserId?: string | null): Promise<TierListDetail | undefined> {
+    const list = await this.getTierList(id);
+    if (!list) return undefined;
+
+    const [ownerUser, tiers, items, collaborators, invitations, likeCount, commentCount, isLiked] = await Promise.all([
+      this.getUser(list.ownerId),
+      db.select().from(tierListTiers).where(eq(tierListTiers.tierListId, id)).orderBy(asc(tierListTiers.position)),
+      this.getTierListItems(id),
+      this.getTierListCollaborators(id),
+      db.select().from(tierListInvitations).where(eq(tierListInvitations.tierListId, id)).then(async (invs) => {
+        const withUsers = await Promise.all(invs.map(async (inv) => {
+          const [u] = await db.select({ id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl })
+            .from(users).where(eq(users.id, inv.invitedUserId));
+          return { ...inv, invitedUser: u ?? { id: inv.invitedUserId, username: "", displayName: "", avatarUrl: "" } };
+        }));
+        return withUsers;
+      }),
+      this.getTierListLikeCount(id),
+      this.getTierListCommentCount(id),
+      appUserId ? this.hasLikedTierList(appUserId, id) : Promise.resolve(false),
+    ]);
+
+    const owner = ownerUser
+      ? { id: ownerUser.id, username: ownerUser.username, displayName: ownerUser.displayName, avatarUrl: ownerUser.avatarUrl ?? "" }
+      : null;
+
+    const tiersWithItems = tiers.map((t) => ({
+      ...t,
+      items: items.filter((i) => i.tierId === t.id),
+    }));
+    const unassignedItems = items.filter((i) => !i.tierId);
+
+    const isOwner = !!appUserId && list.ownerId === appUserId;
+
+    return {
+      ...list,
+      owner,
+      tiers: tiersWithItems,
+      unassignedItems,
+      collaborators: collaborators as (TierListCollaborator & { user: UserStub })[],
+      invitations: invitations as (TierListInvitation & { invitedUser: UserStub })[],
+      isOwner,
+      likeCount,
+      commentCount,
+      isLiked: isLiked ?? false,
+    };
+  }
+
+  async getUserTierLists(userId: string): Promise<TierListWithMeta[]> {
+    const allLists: TierListWithMeta[] = [];
+    const listIds: string[] = [];
+
+    const ownedRows = await db
+      .select({
+        list: tierLists,
+        owner: { id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl },
+        itemCount: sql<number>`(select count(*) from tier_list_items where tier_list_items.tier_list_id = ${tierLists.id})::int`,
+        collaboratorCount: sql<number>`(select count(*) from tier_list_collaborators where tier_list_collaborators.tier_list_id = ${tierLists.id})::int`,
+      })
+      .from(tierLists)
+      .innerJoin(users, eq(tierLists.ownerId, users.id))
+      .where(eq(tierLists.ownerId, userId))
+      .orderBy(desc(tierLists.createdAt));
+
+    const collabRows = await db
+      .select({
+        list: tierLists,
+        owner: { id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl },
+        itemCount: sql<number>`(select count(*) from tier_list_items where tier_list_items.tier_list_id = ${tierLists.id})::int`,
+        collaboratorCount: sql<number>`(select count(*) from tier_list_collaborators where tier_list_collaborators.tier_list_id = ${tierLists.id})::int`,
+      })
+      .from(tierListCollaborators)
+      .innerJoin(tierLists, eq(tierListCollaborators.tierListId, tierLists.id))
+      .innerJoin(users, eq(tierLists.ownerId, users.id))
+      .where(eq(tierListCollaborators.userId, userId))
+      .orderBy(desc(tierLists.createdAt));
+
+    for (const r of ownedRows) {
+      allLists.push({ ...r.list, owner: r.owner as UserStub, itemCount: r.itemCount, collaboratorCount: r.collaboratorCount, isCollaborator: false });
+      listIds.push(r.list.id);
+    }
+    for (const r of collabRows) {
+      if (!listIds.includes(r.list.id)) {
+        allLists.push({ ...r.list, owner: r.owner as UserStub, itemCount: r.itemCount, collaboratorCount: r.collaboratorCount, isCollaborator: true });
+        listIds.push(r.list.id);
+      }
+    }
+
+    if (listIds.length === 0) return allLists;
+
+    const likeCounts = await Promise.all(listIds.map((lid) => this.getTierListLikeCount(lid)));
+    const commentCounts = await Promise.all(listIds.map((lid) => this.getTierListCommentCount(lid)));
+    const coverUrlsByList = await this.getTierListCoverUrls(listIds);
+
+    return allLists.map((l, i) => ({
+      ...l,
+      likeCount: likeCounts[i],
+      commentCount: commentCounts[i],
+      coverUrls: coverUrlsByList[l.id] ?? [],
+    }));
+  }
+
+  private async getTierListCoverUrls(listIds: string[]): Promise<Record<string, string[]>> {
+    if (listIds.length === 0) return {};
+    const rows = await db
+      .select({ tierListId: tierListItems.tierListId, coverUrl: media.coverUrl, position: tierListItems.position })
+      .from(tierListItems)
+      .innerJoin(media, eq(tierListItems.mediaId, media.id))
+      .where(inArray(tierListItems.tierListId, listIds))
+      .orderBy(asc(tierListItems.position));
+    const result: Record<string, string[]> = {};
+    for (const r of rows) {
+      if (!result[r.tierListId]) result[r.tierListId] = [];
+      if (result[r.tierListId].length < 5 && r.coverUrl) result[r.tierListId].push(r.coverUrl);
+    }
+    return result;
+  }
+
+  async updateTierList(id: string, data: Partial<Pick<TierList, "name" | "description" | "visibility" | "tags">>): Promise<TierList> {
+    const [updated] = await db.update(tierLists).set(data).where(eq(tierLists.id, id)).returning();
+    if (!updated) throw new Error("Tier list not found");
+    return updated;
+  }
+
+  async deleteTierList(id: string): Promise<void> {
+    await db.delete(tierLists).where(eq(tierLists.id, id));
+  }
+
+  async likeTierList(userId: string, tierListId: string): Promise<void> {
+    await db.insert(tierListLikes).values({ userId, tierListId }).onConflictDoNothing();
+  }
+
+  async unlikeTierList(userId: string, tierListId: string): Promise<void> {
+    await db.delete(tierListLikes).where(and(eq(tierListLikes.userId, userId), eq(tierListLikes.tierListId, tierListId)));
+  }
+
+  async hasLikedTierList(userId: string, tierListId: string): Promise<boolean> {
+    const [row] = await db
+      .select()
+      .from(tierListLikes)
+      .where(and(eq(tierListLikes.userId, userId), eq(tierListLikes.tierListId, tierListId)));
+    return !!row;
+  }
+
+  async getTierListLikeCount(tierListId: string): Promise<number> {
+    const [row] = await db.select({ count: count() }).from(tierListLikes).where(eq(tierListLikes.tierListId, tierListId));
+    return row?.count ?? 0;
+  }
+
+  async getTierListComments(tierListId: string): Promise<(TierListComment & { user: UserStub })[]> {
+    const rows = await db
+      .select({
+        comment: tierListComments,
+        user: { id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl },
+      })
+      .from(tierListComments)
+      .innerJoin(users, eq(tierListComments.userId, users.id))
+      .where(eq(tierListComments.tierListId, tierListId))
+      .orderBy(asc(tierListComments.createdAt));
+    return rows.map((r) => ({ ...r.comment, user: r.user as UserStub }));
+  }
+
+  async createTierListComment(tierListId: string, userId: string, body: string): Promise<TierListComment> {
+    const [comment] = await db.insert(tierListComments).values({ tierListId, userId, body }).returning();
+    return comment;
+  }
+
+  async deleteTierListComment(commentId: string, userId: string): Promise<void> {
+    const [comment] = await db.select().from(tierListComments).where(eq(tierListComments.id, commentId));
+    if (!comment) throw new Error("Comment not found");
+    if (comment.userId !== userId) throw new Error("Forbidden");
+    await db.delete(tierListComments).where(eq(tierListComments.id, commentId));
+  }
+
+  async getTierListCommentCount(tierListId: string): Promise<number> {
+    const [row] = await db.select({ count: count() }).from(tierListComments).where(eq(tierListComments.tierListId, tierListId));
+    return row?.count ?? 0;
+  }
+
+  async getPublicTierLists(options: { sort?: "popular" | "recent"; page?: number; limit?: number }): Promise<TierListWithMeta[]> {
+    const page = options.page ?? 0;
+    const limit = Math.min(options.limit ?? 24, 50);
+    const offset = page * limit;
+    const sortMode = options.sort ?? "recent";
+
+    const selectFields = {
+      list: tierLists,
+      owner: { id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl },
+      itemCount: sql<number>`(select count(*) from tier_list_items where tier_list_items.tier_list_id = ${tierLists.id})::int`,
+      collaboratorCount: sql<number>`(select count(*) from tier_list_collaborators where tier_list_collaborators.tier_list_id = ${tierLists.id})::int`,
+      likeCount: sql<number>`(select count(*) from tier_list_likes where tier_list_likes.tier_list_id = ${tierLists.id})::int`,
+    };
+
+    const rows = sortMode === "popular"
+      ? await db
+          .select(selectFields)
+          .from(tierLists)
+          .innerJoin(users, eq(tierLists.ownerId, users.id))
+          .where(eq(tierLists.visibility, "public"))
+          .orderBy(desc(sql`(select count(*) from tier_list_likes where tier_list_likes.tier_list_id = tier_lists.id)`), desc(tierLists.createdAt))
+          .limit(limit)
+          .offset(offset)
+      : await db
+          .select(selectFields)
+          .from(tierLists)
+          .innerJoin(users, eq(tierLists.ownerId, users.id))
+          .where(eq(tierLists.visibility, "public"))
+          .orderBy(desc(tierLists.createdAt))
+          .limit(limit)
+          .offset(offset);
+
+    const result: TierListWithMeta[] = rows.map((r) => ({
+      ...r.list,
+      owner: r.owner as UserStub,
+      itemCount: r.itemCount,
+      collaboratorCount: r.collaboratorCount,
+      isCollaborator: false,
+    }));
+
+    const listIds = result.map((l) => l.id);
+    if (listIds.length === 0) return result;
+
+    const commentCounts = await Promise.all(listIds.map((lid) => this.getTierListCommentCount(lid)));
+    const coverUrlsByList = await this.getTierListCoverUrls(listIds);
+
+    return result.map((l, i) => ({
+      ...l,
+      likeCount: (rows[i] as { likeCount?: number }).likeCount ?? 0,
+      commentCount: commentCounts[i],
+      coverUrls: coverUrlsByList[l.id] ?? [],
+    }));
+  }
+
+  async getTierListCollaborators(tierListId: string): Promise<(TierListCollaborator & { user: UserStub })[]> {
+    const rows = await db
+      .select({
+        collab: tierListCollaborators,
+        user: { id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl },
+      })
+      .from(tierListCollaborators)
+      .innerJoin(users, eq(tierListCollaborators.userId, users.id))
+      .where(eq(tierListCollaborators.tierListId, tierListId));
+    return rows.map((r) => ({ ...r.collab, user: r.user as UserStub }));
+  }
+
+  async removeTierListCollaborator(tierListId: string, userId: string): Promise<void> {
+    await db.delete(tierListCollaborators).where(
+      and(eq(tierListCollaborators.tierListId, tierListId), eq(tierListCollaborators.userId, userId))
+    );
+  }
+
+  async createTierListInvitation(tierListId: string, invitedUserId: string, invitedByUserId: string): Promise<TierListInvitation> {
+    const existing = await db
+      .select()
+      .from(tierListInvitations)
+      .where(and(
+        eq(tierListInvitations.tierListId, tierListId),
+        eq(tierListInvitations.invitedUserId, invitedUserId),
+        eq(tierListInvitations.status, "pending"),
+      ));
+    if (existing[0]) return existing[0];
+    const [inv] = await db.insert(tierListInvitations).values({ tierListId, invitedUserId, invitedByUserId }).returning();
+    return inv;
+  }
+
+  async getTierListInvitationsForUser(userId: string): Promise<TierListInvitationWithDetails[]> {
+    const rows = await db
+      .select({
+        invitation: tierListInvitations,
+        tierList: { id: tierLists.id, name: tierLists.name },
+        invitedBy: { id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl },
+      })
+      .from(tierListInvitations)
+      .innerJoin(tierLists, eq(tierListInvitations.tierListId, tierLists.id))
+      .innerJoin(users, eq(tierListInvitations.invitedByUserId, users.id))
+      .where(and(eq(tierListInvitations.invitedUserId, userId), eq(tierListInvitations.status, "pending")))
+      .orderBy(desc(tierListInvitations.createdAt));
+    return rows.map((r) => ({ ...r.invitation, tierList: r.tierList, invitedBy: r.invitedBy as UserStub }));
+  }
+
+  async getTierListInvitations(tierListId: string): Promise<(TierListInvitation & { invitedUser: UserStub })[]> {
+    const rows = await db
+      .select({
+        invitation: tierListInvitations,
+        invitedUser: { id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl },
+      })
+      .from(tierListInvitations)
+      .innerJoin(users, eq(tierListInvitations.invitedUserId, users.id))
+      .where(eq(tierListInvitations.tierListId, tierListId))
+      .orderBy(desc(tierListInvitations.createdAt));
+    return rows.map((r) => ({ ...r.invitation, invitedUser: r.invitedUser as UserStub }));
+  }
+
+  async respondToTierListInvitation(id: string, userId: string, status: "accepted" | "declined"): Promise<TierListInvitation> {
+    const [inv] = await db
+      .select()
+      .from(tierListInvitations)
+      .where(and(eq(tierListInvitations.id, id), eq(tierListInvitations.invitedUserId, userId)));
+    if (!inv) throw new Error("Invitation not found");
+    const [updated] = await db
+      .update(tierListInvitations)
+      .set({ status })
+      .where(eq(tierListInvitations.id, id))
+      .returning();
+    if (status === "accepted") {
+      await db.insert(tierListCollaborators).values({ tierListId: inv.tierListId, userId }).onConflictDoNothing();
+    }
+    return updated;
+  }
+
+  async getPendingTierListInvitationCount(userId: string): Promise<number> {
+    const [row] = await db
+      .select({ c: count() })
+      .from(tierListInvitations)
+      .where(and(eq(tierListInvitations.invitedUserId, userId), eq(tierListInvitations.status, "pending")));
     return row?.c ?? 0;
   }
 

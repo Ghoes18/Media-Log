@@ -8,8 +8,8 @@ interface ListPosterCollageProps {
 }
 
 /**
- * Letterboxd-style poster collage: overlapping posters (up to 5) as a list thumbnail.
- * Uses first ~5 item covers; fallback gradient when empty.
+ * Mosaic poster collage: up to 5 media images arranged as a tiled banner.
+ * Layouts adapt to image count for maximum visual impact.
  */
 export function ListPosterCollage({
   coverUrls = [],
@@ -18,7 +18,6 @@ export function ListPosterCollage({
   aspectRatio = "portrait",
 }: ListPosterCollageProps) {
   const urls = coverUrls.filter(Boolean).slice(0, 5);
-  const hasCovers = urls.length > 0;
 
   const aspectClass =
     aspectRatio === "portrait"
@@ -27,54 +26,75 @@ export function ListPosterCollage({
         ? "aspect-square"
         : "aspect-video";
 
-  if (!hasCovers) {
+  const base = cn("overflow-hidden shrink-0", aspectClass, className);
+
+  if (urls.length === 0) {
+    return <div className={cn(base, "bg-gradient-to-br", fallbackGradient)} />;
+  }
+
+  const n = urls.length;
+
+  const Tile = ({ url, cls }: { url: string; cls?: string }) => (
+    <div className={cn("overflow-hidden", cls)}>
+      <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
+    </div>
+  );
+
+  // 1 image — full bleed
+  if (n === 1) {
     return (
-      <div
-        className={cn(
-          "rounded-md bg-gradient-to-br overflow-hidden shrink-0",
-          fallbackGradient,
-          aspectClass,
-          className
-        )}
-      />
+      <div className={base}>
+        <img src={urls[0]} alt="" className="h-full w-full object-cover" loading="lazy" />
+      </div>
     );
   }
 
-  // Letterboxd-style: 4–5 posters in overlapping grid
-  const positions: { left: string; top: string; width: string }[] = [
-    { left: "0%", top: "0%", width: "55%" },
-    { left: "35%", top: "0%", width: "55%" },
-    { left: "70%", top: "0%", width: "55%" },
-    { left: "17%", top: "45%", width: "55%" },
-    { left: "52%", top: "45%", width: "55%" },
-  ];
+  // 2 images — equal side-by-side columns
+  if (n === 2) {
+    return (
+      <div className={cn(base, "flex gap-px")}>
+        <Tile url={urls[0]} cls="flex-1" />
+        <Tile url={urls[1]} cls="flex-1" />
+      </div>
+    );
+  }
 
-  return (
-    <div
-      className={cn(
-        "relative overflow-hidden rounded-md shrink-0 bg-muted/30",
-        aspectClass,
-        className
-      )}
-    >
-      {urls.map((url, i) => (
-        <div
-          key={`${url}-${i}`}
-          className="absolute rounded overflow-hidden shadow-sm ring-1 ring-border/30"
-          style={{
-            left: positions[i]?.left ?? "0%",
-            top: positions[i]?.top ?? "0%",
-            width: positions[i]?.width ?? "50%",
-            zIndex: i,
-          }}
-        >
-          <img
-            src={url}
-            alt=""
-            className="h-full w-full object-cover"
-          />
+  // 3 images — wide left + two stacked right
+  if (n === 3) {
+    return (
+      <div className={cn(base, "flex gap-px")}>
+        <Tile url={urls[0]} cls="flex-[3]" />
+        <div className="flex flex-[2] flex-col gap-px">
+          <Tile url={urls[1]} cls="flex-1" />
+          <Tile url={urls[2]} cls="flex-1" />
         </div>
-      ))}
+      </div>
+    );
+  }
+
+  // 4 images — 2×2 grid
+  if (n === 4) {
+    return (
+      <div className={cn(base, "grid grid-cols-2 grid-rows-2 gap-px")}>
+        {urls.map((url, i) => (
+          <Tile key={i} url={url} cls="h-full" />
+        ))}
+      </div>
+    );
+  }
+
+  // 5 images — 2 top + 3 bottom
+  return (
+    <div className={cn(base, "flex flex-col gap-px")}>
+      <div className="flex flex-[3] gap-px">
+        <Tile url={urls[0]} cls="flex-1" />
+        <Tile url={urls[1]} cls="flex-1" />
+      </div>
+      <div className="flex flex-[2] gap-px">
+        <Tile url={urls[2]} cls="flex-1" />
+        <Tile url={urls[3]} cls="flex-1" />
+        <Tile url={urls[4]} cls="flex-1" />
+      </div>
     </div>
   );
 }
