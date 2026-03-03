@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { BottomNav } from "@/components/BottomNav";
 import { ProfileBanner } from "@/components/profile/ProfileBanner";
 import { ProfileBadgeSlot, type BadgeData } from "@/components/profile/ProfileBadgeSlot";
+import { ProfileCustomBlock } from "@/components/profile/ProfileCustomBlock";
 import { ProfileEditSheet } from "@/components/profile/ProfileEditSheet";
 import { ProfileThemeProvider } from "@/components/profile/ProfileThemeProvider";
 
@@ -396,6 +397,15 @@ export default function Profile() {
             <p className="mt-4 text-sm leading-relaxed text-muted-foreground" data-testid="text-bio">
               {profile.bio}
             </p>
+          )}
+
+          {(settings?.profileCustomHtml || settings?.profileCustomCss) && (
+            <div className="mt-4" data-testid="profile-custom-section">
+              <ProfileCustomBlock
+                html={settings.profileCustomHtml ?? null}
+                css={settings.profileCustomCss ?? null}
+              />
+            </div>
           )}
 
           {/* Customizable sections in layout order */}

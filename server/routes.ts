@@ -7,7 +7,7 @@ import multer from "multer";
 import { storage } from "./storage";
 import { authMiddleware } from "./auth";
 import { pushToUser } from "./ws";
-import { insertReviewSchema } from "@shared/schema";
+import { insertReviewSchema, MEDIA_TYPES } from "@shared/schema";
 import { z } from "zod";
 import { searchSpotifyAlbums, getSpotifyAlbum, getSpotifyAlbumDetails, getSpotifyArtistAlbums } from "./spotify";
 import { searchOpenLibraryBooks, getOpenLibraryBook, getTrendingBooks, getOpenLibraryDetails, getOpenLibraryAuthorWorks } from "./openlibrary";
@@ -26,6 +26,17 @@ import {
 } from "./preset-lists";
 
 type RequestWithAuth = Request & { authUserId?: string; authPayload?: { name?: string; email?: string } };
+
+function searchRelevanceScore(query: string, title: string): number {
+  const q = query.toLowerCase().trim();
+  const t = (title || "").toLowerCase().trim();
+  if (t === q) return 100;
+  if (t.startsWith(q)) return 80;
+  if (q.startsWith(t)) return 70;
+  if (t.includes(q)) return 60;
+  if (q.includes(t)) return 50;
+  return 0;
+}
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   const uid = (req as RequestWithAuth).authUserId;
@@ -138,15 +149,17 @@ export async function registerRoutes(
         return res.json(results);
       }
 
-      const [movies, tv, anime, books, music, games] = await Promise.all([
+      const [movies, tv, games, anime, music, books] = await Promise.all([
         searchTmdbMovies(q, 4).catch(() => []),
         searchTmdbTv(q, 4).catch(() => []),
-        searchTmdbAnime(q, 4).catch(() => []),
-        searchOpenLibraryBooks(q, 4).catch(() => []),
-        searchSpotifyAlbums(q, 4).catch(() => []),
         searchRawgGames(q, 4).catch(() => []),
+        searchTmdbAnime(q, 4).catch(() => []),
+        searchSpotifyAlbums(q, 4).catch(() => []),
+        searchOpenLibraryBooks(q, 4).catch(() => []),
       ]);
-      res.json([...movies, ...tv, ...anime, ...books, ...music, ...games]);
+      const allResults = [...movies, ...tv, ...games, ...anime, ...music, ...books];
+      allResults.sort((a, b) => searchRelevanceScore(q, b.title) - searchRelevanceScore(q, a.title));
+      res.json(allResults);
     } catch (err: any) {
       console.error("Unified search error:", err.message);
       res.status(500).json({ message: "Search failed" });
@@ -161,8 +174,7 @@ export async function registerRoutes(
     if (!personId || !type) {
       return res.status(400).json({ message: "personId and type are required" });
     }
-    const validTypes = ["movie", "tv", "anime", "book", "music", "game"];
-    if (!validTypes.includes(type)) {
+    if (!(MEDIA_TYPES as readonly string[]).includes(type)) {
       return res.status(400).json({ message: "type must be movie, tv, anime, book, music, or game" });
     }
     try {
@@ -196,7 +208,7 @@ export async function registerRoutes(
     }
   });
 
-  const DISCOVER_CATEGORY_TYPES = ["movie", "tv", "anime", "book", "music", "game"] as const;
+  const DISCOVER_CATEGORY_TYPES = MEDIA_TYPES;
 
   app.get("/api/discover/category/:type", async (req, res) => {
     const type = (req.params.type as string)?.toLowerCase();
@@ -420,12 +432,20 @@ export async function registerRoutes(
     }
     const sub = await storage.getUserSubscription(targetId);
     const body = req.body as Record<string, unknown>;
-    const proFields = ["bannerUrl", "bannerPosition", "themeAccent", "themeCustomColor", "layoutOrder", "avatarFrameId"];
+    const proFields = ["bannerUrl", "bannerPosition", "themeAccent", "themeCustomColor", "layoutOrder", "avatarFrameId", "profileCustomHtml", "profileCustomCss"];
     const data: Record<string, unknown> = { ...body };
     if (sub.status !== "pro") {
       for (const f of proFields) {
         delete data[f];
       }
+    }
+    const MAX_HTML_BYTES = 50 * 1024;
+    const MAX_CSS_BYTES = 20 * 1024;
+    if (typeof data.profileCustomHtml === "string" && Buffer.byteLength(data.profileCustomHtml, "utf8") > MAX_HTML_BYTES) {
+      return res.status(400).json({ message: "Profile HTML exceeds 50 KB limit." });
+    }
+    if (typeof data.profileCustomCss === "string" && Buffer.byteLength(data.profileCustomCss, "utf8") > MAX_CSS_BYTES) {
+      return res.status(400).json({ message: "Profile CSS exceeds 20 KB limit." });
     }
     const settings = await storage.updateProfileSettings(targetId, data as any);
     res.json(settings);
@@ -1235,6 +1255,22 @@ export async function registerRoutes(
     }
   });
 
+  // POST /api/lists/:id/fork
+  app.post("/api/lists/:id/fork", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const listId = req.params.id as string;
+    const { name } = req.body as { name?: string };
+    try {
+      const forked = await storage.forkList(appUser.id, listId, name?.trim() || undefined);
+      res.status(201).json(forked);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to fork list";
+      const status = message === "Source list not found" ? 404 : message === "Cannot fork a private list" ? 403 : 400;
+      res.status(status).json({ message });
+    }
+  });
+
   // DELETE /api/lists/:id/items/:mediaId
   app.delete("/api/lists/:id/items/:mediaId", requireAuth, async (req, res) => {
     const authReq = req as RequestWithAuth;
@@ -1438,6 +1474,66 @@ export async function registerRoutes(
     res.status(201).json(list);
   });
 
+  app.post("/api/tier-lists/:id/fork", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const tierListId = req.params.id as string;
+    const { name } = req.body as { name?: string };
+    try {
+      const forked = await storage.forkTierList(appUser.id, tierListId, name);
+      res.status(201).json(forked);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to fork tier list";
+      const status = message === "Tier list not found" ? 404 : message === "Cannot fork a private tier list" ? 403 : 400;
+      res.status(status).json({ message });
+    }
+  });
+
+  app.get("/api/tier-lists/compare", async (req, res) => {
+    const idA = req.query.a as string;
+    const idB = req.query.b as string;
+    if (!idA || !idB) return res.status(400).json({ message: "Both 'a' and 'b' tier list IDs are required" });
+
+    const [listA, listB] = await Promise.all([
+      storage.getTierList(idA),
+      storage.getTierList(idB),
+    ]);
+    if (!listA || !listB) return res.status(404).json({ message: "One or both tier lists not found" });
+    if (listA.visibility !== "public" || listB.visibility !== "public") {
+      return res.status(403).json({ message: "Both tier lists must be public" });
+    }
+
+    const data = await storage.getTierListCompareData(idA, idB);
+    if (!data) return res.status(404).json({ message: "Compare data not available" });
+    res.json(data);
+  });
+
+  app.get("/api/tier-lists/:id/forks", async (req, res) => {
+    const tierList = await storage.getTierList(req.params.id as string);
+    if (!tierList) return res.status(404).json({ message: "Tier list not found" });
+    if (tierList.visibility !== "public") return res.status(403).json({ message: "Tier list is not public" });
+    const forks = await storage.getPublicTierLists({ sort: "recent", page: 0, limit: 50 });
+    const filtered = forks.filter((f) => f.sourceTierListId === tierList.id || f.sourceTierListId === tierList.sourceTierListId);
+    res.json(filtered);
+  });
+
+  app.post("/api/tier-lists/from-template", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const { sourceTierListId, name } = req.body as { sourceTierListId?: string; name?: string };
+    if (!sourceTierListId || typeof sourceTierListId !== "string") {
+      return res.status(400).json({ message: "sourceTierListId is required" });
+    }
+    try {
+      const list = await storage.createTierListFromTemplate(appUser.id, sourceTierListId, name);
+      res.status(201).json(list);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to create from template";
+      const status = message === "Tier list not found" ? 404 : message === "Template is not public" || message === "This list is not published as a template" ? 403 : 400;
+      res.status(status).json({ message });
+    }
+  });
+
   app.get("/api/tier-lists/:id", async (req, res) => {
     const authReq = req as RequestWithAuth;
     const authUserId = authReq.authUserId;
@@ -1461,18 +1557,40 @@ export async function registerRoutes(
     res.json(detail);
   });
 
+  app.get("/api/tier-lists/:id/community-aggregate", async (req, res) => {
+    const tierList = await storage.getTierList(req.params.id as string);
+    if (!tierList) return res.status(404).json({ message: "Tier list not found" });
+    let templateId: string | null = null;
+    if (tierList.isTemplate && tierList.visibility === "public") {
+      templateId = tierList.id;
+    } else if (tierList.sourceTierListId) {
+      const source = await storage.getTierList(tierList.sourceTierListId);
+      if (source && source.isTemplate && source.visibility === "public") templateId = source.id;
+    }
+    if (!templateId) return res.status(404).json({ message: "Not a template or fork of a public template" });
+    const aggregate = await storage.getTierListCommunityAggregate(templateId);
+    if (!aggregate) return res.status(404).json({ message: "Community aggregate not available" });
+    res.json(aggregate);
+  });
+
   app.patch("/api/tier-lists/:id", requireAuth, async (req, res) => {
     const authReq = req as RequestWithAuth;
     const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
     const { tierList } = await requireTierListAccess(req.params.id as string, appUser);
     if (tierList.ownerId !== appUser.id) return res.status(403).json({ message: "Only owner can update list metadata" });
 
-    const { name, description, visibility, tags } = req.body as Partial<{ name: string; description: string; visibility: string; tags: string[] }>;
+    const { name, description, visibility, tags, isTemplate } = req.body as Partial<{
+      name: string; description: string; visibility: string; tags: string[]; isTemplate: boolean;
+    }>;
     const data: Record<string, unknown> = {};
     if (typeof name === "string") data.name = name.trim().slice(0, 100);
     if (typeof description === "string") data.description = description.trim().slice(0, 500);
     if (visibility === "public" || visibility === "private") data.visibility = visibility;
     if (Array.isArray(tags)) data.tags = tags.slice(0, 10).filter((t): t is string => typeof t === "string");
+    if (typeof isTemplate === "boolean") {
+      data.isTemplate = isTemplate;
+      if (isTemplate && tierList.visibility !== "public") data.visibility = "public";
+    }
 
     const updated = await storage.updateTierList(tierList.id, data as any);
     res.json(updated);
@@ -1550,6 +1668,97 @@ export async function registerRoutes(
     res.status(201).json(item);
   });
 
+  app.post("/api/tier-lists/:id/items/quick-fill", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const tierListId = req.params.id as string;
+    await requireTierListAccess(tierListId, appUser);
+    const body = req.body as { source?: string; type?: string; limit?: number };
+    const source = body.source === "watchlist" ? "watchlist" : body.source === "trending" ? "trending" : null;
+    if (!source) return res.status(400).json({ message: "source must be 'trending' or 'watchlist'" });
+
+    const beforeItems = await storage.getTierListItems(tierListId);
+    const previousTotal = beforeItems.length;
+
+    if (source === "watchlist") {
+      const limit = Math.min(Math.max(1, body.limit ?? 100), 100);
+      const watchlistItems = await storage.getWatchlist(appUser.id);
+      const mediaIds = watchlistItems.slice(0, limit).map((m) => m.id);
+      for (const mediaId of mediaIds) {
+        try {
+          await storage.addTierListItem(tierListId, mediaId, appUser.id);
+        } catch {
+          // skip on error
+        }
+      }
+      const afterItems = await storage.getTierListItems(tierListId);
+      const added = afterItems.length - previousTotal;
+      const skipped = mediaIds.length - added;
+      return res.json({ added, skipped });
+    }
+
+    // source === "trending"
+    const type = body.type;
+    const validTypes = ["movie", "tv", "anime", "book", "music", "game"];
+    if (!type || !validTypes.includes(type)) {
+      return res.status(400).json({ message: "type must be one of: movie, tv, anime, book, music, game" });
+    }
+    const limit = Math.min(Math.max(1, body.limit ?? 20), 50);
+    let results: any[] = [];
+    try {
+      switch (type) {
+        case "movie":
+          results = await getTrendingMovies(limit);
+          break;
+        case "tv":
+          results = await getTrendingTv(limit);
+          break;
+        case "anime":
+          results = await getTrendingAnime(limit);
+          break;
+        case "book":
+          results = await getTrendingBooks(limit);
+          break;
+        case "music":
+          results = await searchSpotifyAlbums("top hits 2024", limit).catch(() => []);
+          break;
+        case "game":
+          results = await getTrendingGames(limit).catch(() => []);
+          break;
+        default:
+          return res.status(400).json({ message: "Invalid type" });
+      }
+    } catch (err: any) {
+      console.error("Quick-fill trending error:", err.message);
+      return res.status(500).json({ message: "Failed to fetch trending content" });
+    }
+
+    for (const item of results) {
+      try {
+        const media = await storage.ensureMedia({
+          type: item.type,
+          title: item.title ?? "",
+          creator: item.creator ?? "",
+          year: item.year ?? "",
+          coverUrl: item.coverUrl ?? "",
+          coverGradient: item.coverGradient ?? "from-slate-700 to-slate-900",
+          synopsis: item.synopsis ?? "",
+          tags: Array.isArray(item.tags) ? item.tags : [],
+          rating: item.rating ?? "",
+          externalId: item.externalId ?? "",
+        });
+        await storage.addTierListItem(tierListId, media.id, appUser.id);
+      } catch {
+        // skip items that fail to ensure or add
+      }
+    }
+
+    const afterItems = await storage.getTierListItems(tierListId);
+    const added = afterItems.length - previousTotal;
+    const skipped = results.length - added;
+    res.json({ added, skipped });
+  });
+
   app.patch("/api/tier-lists/:id/items/:itemId/move", requireAuth, async (req, res) => {
     const authReq = req as RequestWithAuth;
     const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
@@ -1623,6 +1832,41 @@ export async function registerRoutes(
     } catch (err: any) {
       res.status(err.message === "Forbidden" ? 403 : 404).json({ message: err.message });
     }
+  });
+
+  app.get("/api/tier-lists/:id/reactions", async (req, res) => {
+    const tierList = await storage.getTierList(req.params.id as string);
+    if (!tierList) return res.status(404).json({ message: "Tier list not found" });
+    if (tierList.visibility !== "public") return res.status(403).json({ message: "Forbidden" });
+    const authReq = req as RequestWithAuth;
+    let appUserId: string | null = null;
+    if (authReq.authUserId) {
+      const appUser = await storage.getOrCreateAppUser(authReq.authUserId, {});
+      appUserId = appUser.id;
+    }
+    const reactions = await storage.getTierListItemReactions(req.params.id as string, appUserId);
+    res.json(reactions);
+  });
+
+  app.post("/api/tier-lists/:id/items/:itemId/react", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    const tierList = await storage.getTierList(req.params.id as string);
+    if (!tierList) return res.status(404).json({ message: "Tier list not found" });
+    if (tierList.visibility !== "public") return res.status(403).json({ message: "Forbidden" });
+    const { reaction } = req.body as { reaction?: string };
+    if (reaction !== "agree" && reaction !== "disagree") {
+      return res.status(400).json({ message: "reaction must be 'agree' or 'disagree'" });
+    }
+    await storage.reactToTierListItem(appUser.id, req.params.itemId as string, reaction);
+    res.json({ ok: true });
+  });
+
+  app.delete("/api/tier-lists/:id/items/:itemId/react", requireAuth, async (req, res) => {
+    const authReq = req as RequestWithAuth;
+    const appUser = await storage.getOrCreateAppUser(authReq.authUserId!, {});
+    await storage.unreactToTierListItem(appUser.id, req.params.itemId as string);
+    res.json({ ok: true });
   });
 
   app.post("/api/tier-lists/:id/invitations", requireAuth, async (req, res) => {

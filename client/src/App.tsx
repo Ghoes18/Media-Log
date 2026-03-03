@@ -29,6 +29,7 @@ import Lists from "./pages/lists";
 import ListDetail from "./pages/list-detail";
 import PresetListDetail from "./pages/preset-list-detail";
 import TierListDetail from "./pages/tier-list-detail";
+import TierListCompare from "./pages/tier-list-compare";
 import CategoryResults from "./pages/category-results";
 
 function Router() {
@@ -51,6 +52,7 @@ function Router() {
       <Route path="/messages/:conversationId" component={Messages} />
       <Route path="/lists" component={Lists} />
       <Route path="/lists/:id" component={ListDetail} />
+      <Route path="/tier-lists/compare" component={TierListCompare} />
       <Route path="/tier-lists/:id" component={TierListDetail} />
       <Route path="/preset-lists/:id" component={PresetListDetail} />
       <Route component={NotFound} />

@@ -38,17 +38,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
-const MEDIA_TYPES = ["movie", "tv", "anime", "book", "music", "game"] as const;
-type MediaType = (typeof MEDIA_TYPES)[number];
-
-const MEDIA_LABELS: Record<MediaType, string> = {
-  movie: "Movies",
-  anime: "Animation",
-  book: "Books",
-  tv: "TV",
-  music: "Music",
-  game: "Games",
-};
+import { MEDIA_TYPES, MEDIA_LABELS, type MediaType } from "@shared/schema";
 
 const SORT_OPTIONS = [
   { value: "trending", label: "Trending" },

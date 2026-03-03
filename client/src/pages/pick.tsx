@@ -20,17 +20,7 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useEnsureMedia } from "@/lib/use-ensure-media";
 
-const MEDIA_TYPES = ["movie", "tv", "anime", "book", "music", "game"] as const;
-type MediaType = (typeof MEDIA_TYPES)[number];
-
-const MEDIA_LABELS: Record<MediaType, string> = {
-  movie: "Movies",
-  anime: "Animation",
-  book: "Books",
-  tv: "TV",
-  music: "Music",
-  game: "Games",
-};
+import { MEDIA_TYPES, MEDIA_LABELS, type MediaType } from "@shared/schema";
 
 function mediaIcon(type: string) {
   switch (type) {

@@ -14,6 +14,17 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const MEDIA_TYPES = ["movie", "tv", "game", "anime", "music", "book"] as const;
+export type MediaType = (typeof MEDIA_TYPES)[number];
+export const MEDIA_LABELS: Record<MediaType, string> = {
+  movie: "Movies",
+  tv: "TV Shows",
+  game: "Games",
+  anime: "Animation",
+  music: "Music",
+  book: "Books",
+};
+
 export const users = pgTable("users", {
   id: varchar("id", { length: 36 })
     .primaryKey()
@@ -155,6 +166,8 @@ export const profileSettings = pgTable("profile_settings", {
   pronouns: text("pronouns"),
   aboutMe: text("about_me"),
   showBadges: boolean("show_badges").default(true),
+  profileCustomHtml: text("profile_custom_html"),
+  profileCustomCss: text("profile_custom_css"),
 });
 
 export const badges = pgTable("badges", {
@@ -240,6 +253,8 @@ export const lists = pgTable("lists", {
   visibility: text("visibility").notNull().default("private"),
   isRanked: boolean("is_ranked").notNull().default(false),
   tags: text("tags").array().default(sql`'{}'::text[]`),
+  sourceListId: varchar("source_list_id", { length: 36 }).references(() => lists.id, { onDelete: "set null" }),
+  shareToken: varchar("share_token", { length: 64 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -302,6 +317,8 @@ export const tierLists = pgTable("tier_lists", {
   description: text("description").default(""),
   visibility: text("visibility").notNull().default("private"),
   tags: text("tags").array().default(sql`'{}'::text[]`),
+  isTemplate: boolean("is_template").notNull().default(false),
+  sourceTierListId: varchar("source_tier_list_id", { length: 36 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -372,6 +389,21 @@ export const tierListComments = pgTable("tier_list_comments", {
   body: text("body").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const tierListItemReactions = pgTable(
+  "tier_list_item_reactions",
+  {
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tierListItemId: varchar("tier_list_item_id", { length: 36 })
+      .notNull()
+      .references(() => tierListItems.id, { onDelete: "cascade" }),
+    reaction: text("reaction").notNull(), // "agree" | "disagree"
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.tierListItemId] })],
+);
 
 // Preset lists are virtual (API-driven); presetListId is the slug (e.g. "imdb-top-250")
 export const presetListLikes = pgTable(
@@ -469,6 +501,7 @@ export type TierListCollaborator = typeof tierListCollaborators.$inferSelect;
 export type TierListInvitation = typeof tierListInvitations.$inferSelect;
 export type TierListLike = typeof tierListLikes.$inferSelect;
 export type TierListComment = typeof tierListComments.$inferSelect;
+export type TierListItemReaction = typeof tierListItemReactions.$inferSelect;
 export type InsertTierList = z.infer<typeof insertTierListSchema>;
 export type InsertTierListTier = z.infer<typeof insertTierListTierSchema>;
 export type InsertTierListItem = z.infer<typeof insertTierListItemSchema>;

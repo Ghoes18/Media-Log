@@ -20,6 +20,7 @@ import {
   ChevronUp,
   ChevronDown,
   Plus,
+  GitFork,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,7 @@ import { InviteCollaboratorsModal } from "@/components/lists/InviteCollaborators
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface UserStub {
   id: string;
@@ -258,6 +260,25 @@ export default function ListDetail() {
     },
     onSuccess: () => {
       refetchComments();
+    },
+  });
+
+  const forkMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/lists/${id}/fork`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to fork list");
+      }
+      return res.json();
+    },
+    onSuccess: (forked: { id: string }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/lists"] });
+      toast.success("List forked! Make it your own.");
+      navigate(`/lists/${forked.id}`);
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Failed to fork list");
     },
   });
 
@@ -515,6 +536,22 @@ export default function ListDetail() {
             
             {!editing && (
               <div className="flex items-center gap-3 shrink-0">
+                {list.visibility === "public" && currentUser && !list.isOwner && (
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className=" shadow-sm transition-all duration-300 btn-skeuo-base bg-card border-border hover:bg-muted text-foreground"
+                    onClick={() => forkMutation.mutate()}
+                    disabled={forkMutation.isPending}
+                  >
+                    {forkMutation.isPending ? (
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    ) : (
+                      <GitFork className="mr-2 h-5 w-5" />
+                    )}
+                    {forkMutation.isPending ? "Forking…" : "Fork list"}
+                  </Button>
+                )}
                 {list.visibility === "public" && currentUser && (
                   <Button
                     size="lg"
@@ -755,6 +792,8 @@ export default function ListDetail() {
                         <button
                           onClick={() => handleMoveUp(index)}
                           disabled={index === 0 || reorderMutation.isPending}
+                          title="Move up"
+                          aria-label="Move item up"
                           className="p-1 border border-transparent hover:border-border text-muted-foreground hover:text-foreground hover:bg-background disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
                         >
                           <ChevronUp className="h-4 w-4" />
@@ -762,6 +801,8 @@ export default function ListDetail() {
                         <button
                           onClick={() => handleMoveDown(index)}
                           disabled={index === sortedItems.length - 1 || reorderMutation.isPending}
+                          title="Move down"
+                          aria-label="Move item down"
                           className="p-1 border border-transparent hover:border-border text-muted-foreground hover:text-foreground hover:bg-background disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
                         >
                           <ChevronDown className="h-4 w-4" />

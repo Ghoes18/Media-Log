@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
 import { BottomNav } from "@/components/BottomNav";
 import { Footer } from "@/components/Footer";
 
-type MediaType = "movie" | "anime" | "book" | "tv" | "music" | "game";
+import { MEDIA_TYPES, MEDIA_LABELS, type MediaType } from "@shared/schema";
 
 function mediaIcon(type: MediaType) {
   switch (type) {
@@ -384,24 +384,11 @@ export default function Home() {
                     <TabsTrigger value="all" className="rounded-md" data-testid="tab-all">
                       All
                     </TabsTrigger>
-                    <TabsTrigger value="movie" className="rounded-md" data-testid="tab-movie">
-                      Movies
-                    </TabsTrigger>
-                    <TabsTrigger value="anime" className="rounded-md" data-testid="tab-anime">
-                      Animation
-                    </TabsTrigger>
-                    <TabsTrigger value="book" className="rounded-md" data-testid="tab-book">
-                      Books
-                    </TabsTrigger>
-                    <TabsTrigger value="tv" className="rounded-md" data-testid="tab-tv">
-                      TV
-                    </TabsTrigger>
-                    <TabsTrigger value="music" className="rounded-md" data-testid="tab-music">
-                      Music
-                    </TabsTrigger>
-                    <TabsTrigger value="game" className="rounded-md" data-testid="tab-game">
-                      Games
-                    </TabsTrigger>
+                    {MEDIA_TYPES.map((t) => (
+                      <TabsTrigger key={t} value={t} className="rounded-md" data-testid={`tab-${t}`}>
+                        {MEDIA_LABELS[t]}
+                      </TabsTrigger>
+                    ))}
                   </TabsList>
                 </Tabs>
 

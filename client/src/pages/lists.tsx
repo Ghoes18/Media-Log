@@ -167,7 +167,9 @@ function ListCard({ list }: { list: ListWithMeta }) {
   );
 }
 
-interface TierListWithMeta extends ListWithMeta {}
+interface TierListWithMeta extends ListWithMeta {
+  isTemplate?: boolean;
+}
 
 function TierListCard({ list }: { list: TierListWithMeta }) {
   return (
@@ -179,8 +181,13 @@ function TierListCard({ list }: { list: TierListWithMeta }) {
             className="absolute inset-0 w-full h-full transition-transform duration-500 group-hover:scale-105"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-          <div className="absolute top-2.5 right-2.5 bg-primary/80 backdrop-blur-sm px-2 py-1 rounded-md border border-white/10">
-            <span className="text-[9px] font-semibold text-white uppercase tracking-wide flex items-center gap-1">
+          <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5">
+            {list.isTemplate && (
+              <span className="bg-amber-500/90 backdrop-blur-sm px-2 py-1 rounded-md border border-white/10 text-[9px] font-semibold text-white uppercase tracking-wide">
+                Template
+              </span>
+            )}
+            <span className="bg-primary/80 backdrop-blur-sm px-2 py-1 rounded-md border border-white/10 text-[9px] font-semibold text-white uppercase tracking-wide flex items-center gap-1">
               <LayoutList className="h-3 w-3" /> Tier
             </span>
           </div>

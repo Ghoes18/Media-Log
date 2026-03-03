@@ -11,6 +11,7 @@ import {
   Award,
   ImagePlus,
   X,
+  Code2,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -58,6 +59,8 @@ export type ProfileSettings = {
   pronouns?: string | null;
   aboutMe?: string | null;
   showBadges?: boolean | null;
+  profileCustomHtml?: string | null;
+  profileCustomCss?: string | null;
 };
 
 interface ProfileEditSheetProps {
@@ -119,6 +122,12 @@ export function ProfileEditSheet({
   const [layoutOrder, setLayoutOrder] = useState<string[]>(
     (profileSettings?.layoutOrder as string[]) ?? [...SECTION_IDS]
   );
+  const [profileCustomHtml, setProfileCustomHtml] = useState(
+    profileSettings?.profileCustomHtml ?? ""
+  );
+  const [profileCustomCss, setProfileCustomCss] = useState(
+    profileSettings?.profileCustomCss ?? ""
+  );
 
   useEffect(() => {
     setDisplayName(user.displayName);
@@ -133,6 +142,8 @@ export function ProfileEditSheet({
     setLayoutOrder(
       (profileSettings?.layoutOrder as string[]) ?? [...SECTION_IDS]
     );
+    setProfileCustomHtml(profileSettings?.profileCustomHtml ?? "");
+    setProfileCustomCss(profileSettings?.profileCustomCss ?? "");
   }, [profileSettings, open]);
 
   const userMutation = useMutation({
@@ -177,6 +188,14 @@ export function ProfileEditSheet({
     settingsMutation.mutate({ layoutOrder });
   };
 
+  const handleSaveCustom = () => {
+    if (!isPro) return;
+    settingsMutation.mutate({
+      profileCustomHtml: profileCustomHtml || null,
+      profileCustomCss: profileCustomCss || null,
+    });
+  };
+
   const moveSection = (index: number, dir: 1 | -1) => {
     const next = index + dir;
     if (next < 0 || next >= layoutOrder.length) return;
@@ -219,7 +238,7 @@ export function ProfileEditSheet({
         </SheetHeader>
 
         <Tabs defaultValue="basics" className="mt-4 flex flex-1 flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="basics" className="text-xs">
               Basics
             </TabsTrigger>
@@ -230,6 +249,10 @@ export function ProfileEditSheet({
             <TabsTrigger value="layout" className="text-xs">
               <LayoutGrid className="mr-1 h-3 w-3" />
               Layout
+            </TabsTrigger>
+            <TabsTrigger value="custom" className="text-xs">
+              <Code2 className="mr-1 h-3 w-3" />
+              Custom
             </TabsTrigger>
             <TabsTrigger value="badges" className="text-xs">
               <Award className="mr-1 h-3 w-3" />
@@ -476,6 +499,55 @@ export function ProfileEditSheet({
                   disabled={settingsMutation.isPending}
                 >
                   Save layout
+                </Button>
+              )}
+            </TabsContent>
+
+            <TabsContent value="custom" className="mt-0 space-y-4">
+              {!isPro && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+                  <PaywallBadge label="Upgrade to Pro to add custom HTML and CSS to your profile" />
+                </div>
+              )}
+              <p className="text-sm text-muted-foreground">
+                Add custom HTML and CSS to your profile (MySpace-style). HTML max 50 KB, CSS max 20 KB.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="profileCustomHtml" className="flex items-center gap-2">
+                  HTML
+                  {!isPro && <PaywallBadge />}
+                </Label>
+                <Textarea
+                  id="profileCustomHtml"
+                  value={profileCustomHtml}
+                  onChange={(e) => setProfileCustomHtml(e.target.value)}
+                  placeholder="<p>Hello world!</p>"
+                  rows={6}
+                  disabled={!isPro}
+                  className={cn("font-mono text-xs", !isPro && "opacity-60")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="profileCustomCss" className="flex items-center gap-2">
+                  CSS
+                  {!isPro && <PaywallBadge />}
+                </Label>
+                <Textarea
+                  id="profileCustomCss"
+                  value={profileCustomCss}
+                  onChange={(e) => setProfileCustomCss(e.target.value)}
+                  placeholder=".my-box { color: hotpink; }"
+                  rows={6}
+                  disabled={!isPro}
+                  className={cn("font-mono text-xs", !isPro && "opacity-60")}
+                />
+              </div>
+              {isPro && (
+                <Button
+                  onClick={handleSaveCustom}
+                  disabled={settingsMutation.isPending}
+                >
+                  Save custom
                 </Button>
               )}
             </TabsContent>

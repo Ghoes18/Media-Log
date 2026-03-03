@@ -54,6 +54,7 @@ app.use((req, res, next) => {
 (async () => {
   await seedDatabase();
   await storage.seedBadgesIfEmpty();
+  storage.seedPrebuiltTemplatesIfEmpty().catch((err) => console.error("[seed-templates] error:", err));
   backfillMissingCovers().catch((err) => console.error("[backfill] error:", err));
   setupWebSocketServer(httpServer);
   await registerRoutes(httpServer, app);

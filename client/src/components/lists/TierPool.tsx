@@ -7,35 +7,47 @@ import { cn } from "@/lib/utils";
 interface TierPoolProps {
   id: string;
   items: TierItemWithDetails[];
+  canDrag: boolean;
 }
 
-export function TierPool({ id, items }: TierPoolProps) {
+export function TierPool({ id, items, canDrag }: TierPoolProps) {
   const { setNodeRef, isOver } = useDroppable({ id });
   const itemIds = items.map((i) => i.id);
 
   return (
-    <div
-      ref={setNodeRef}
-      className={cn(
-        "flex min-h-[5rem] rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/20 p-2 transition-colors",
-        isOver && "border-primary/50 bg-primary/5",
-      )}
-    >
-      <div className="w-14 sm:w-20 shrink-0 flex items-center justify-center text-muted-foreground text-sm font-medium">
-        Pool
-      </div>
-      <div className="flex-1 flex flex-wrap gap-2 items-center min-w-0">
-        <SortableContext items={itemIds} strategy={horizontalListSortingStrategy}>
-          {items.map((item) => (
-            <TierItem
-              key={item.id}
-              id={item.id}
-              coverUrl={item.media.coverUrl}
-              coverGradient={item.media.coverGradient}
-              title={item.media.title}
-            />
-          ))}
-        </SortableContext>
+    <div className="mt-2 space-y-1.5">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60 pl-1">
+        Unranked
+      </p>
+      <div
+        ref={setNodeRef}
+        className={cn(
+          "min-h-[5.5rem] rounded-xl border-2 border-dashed p-2.5 transition-all duration-150",
+          isOver
+            ? "border-primary/60 bg-primary/5 shadow-md shadow-primary/10"
+            : "border-border/40 bg-muted/10 hover:border-border/60",
+        )}
+      >
+        <div className="flex flex-wrap gap-2 items-center">
+          <SortableContext items={itemIds} strategy={horizontalListSortingStrategy}>
+            {items.map((item) => (
+              <TierItem
+                key={item.id}
+                id={item.id}
+                coverUrl={item.media.coverUrl}
+                coverGradient={item.media.coverGradient}
+                title={item.media.title}
+                disabled={!canDrag}
+              />
+            ))}
+          </SortableContext>
+
+          {items.length === 0 && (
+            <p className="text-xs text-muted-foreground/40 italic select-none w-full text-center py-3">
+              {isOver ? "Release to unrank" : "Items not yet placed will appear here"}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

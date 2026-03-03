@@ -75,16 +75,31 @@ function scoreSearchResult(item: any, query: string): number {
   return 0;
 }
 
-type MediaType = "movie" | "anime" | "book" | "tv" | "music" | "game";
+import { MEDIA_TYPES as MEDIA_TYPE_VALUES, type MediaType } from "@shared/schema";
 
-const MEDIA_TYPES: { value: MediaType; label: string; icon: typeof Film }[] = [
-  { value: "movie", label: "Movie", icon: Film },
-  { value: "anime", label: "Animation", icon: Clapperboard },
-  { value: "book", label: "Book", icon: BookOpen },
-  { value: "tv", label: "TV", icon: Tv2 },
-  { value: "music", label: "Music", icon: Music },
-  { value: "game", label: "Game", icon: Gamepad2 },
-];
+const MEDIA_TYPE_ICON: Record<MediaType, typeof Film> = {
+  movie: Film,
+  tv: Tv2,
+  game: Gamepad2,
+  anime: Clapperboard,
+  music: Music,
+  book: BookOpen,
+};
+
+const MEDIA_TYPE_LABEL: Record<MediaType, string> = {
+  movie: "Movie",
+  tv: "TV",
+  game: "Game",
+  anime: "Animation",
+  music: "Music",
+  book: "Book",
+};
+
+const MEDIA_TYPES = MEDIA_TYPE_VALUES.map((value) => ({
+  value,
+  label: MEDIA_TYPE_LABEL[value],
+  icon: MEDIA_TYPE_ICON[value],
+}));
 
 const stagger = {
   hidden: {},

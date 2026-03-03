@@ -50,6 +50,34 @@
       "when": 1741200000000,
       "tag": "0006_tier_lists",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1741300000000,
+      "tag": "0007_tier_list_template",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1741400000000,
+      "tag": "0008_list_features",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1741500000000,
+      "tag": "0009_tier_list_medium_features",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1741600000000,
+      "tag": "0010_profile_custom_html_css",
+      "breakpoints": true
     }
   ]
 }

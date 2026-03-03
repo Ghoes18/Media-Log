@@ -18,6 +18,8 @@ vite.config.ts.*
 /.agents
 /.local
 
+.superdesign
+
 .env
 .env.local
 /docs

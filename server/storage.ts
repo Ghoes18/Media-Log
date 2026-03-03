@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, sql, count, lt, or, ne, isNull, ilike, inArray } from "drizzle-orm";
+import { eq, and, desc, asc, sql, count, lt, or, ne, isNull, isNotNull, ilike, inArray } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -54,6 +54,8 @@ import {
   type TierListCollaborator,
   type TierListInvitation,
   type TierListComment,
+  tierListItemReactions,
+  type TierListItemReaction,
 } from "@shared/schema";
 
 export interface ConversationWithDetails extends Conversation {
@@ -114,6 +116,29 @@ export interface TierListDetail extends TierList {
 export interface TierListInvitationWithDetails extends TierListInvitation {
   tierList: Pick<TierList, "id" | "name">;
   invitedBy: UserStub;
+}
+
+export interface TierListItemReactionCounts {
+  itemId: string;
+  agreeCount: number;
+  disagreeCount: number;
+  userReaction?: "agree" | "disagree" | null;
+}
+
+export interface TierListCommunityAggregateByMedia {
+  mediaId: string;
+  mediaTitle: string;
+  tierLabel: string;
+  tierPosition: number;
+  percent: number;
+  totalRanked: number;
+}
+
+export interface TierListCommunityAggregate {
+  templateId: string;
+  forkCount: number;
+  tierLabels: string[];
+  byMedia: TierListCommunityAggregateByMedia[];
 }
 
 export interface IStorage {
@@ -221,7 +246,18 @@ export interface IStorage {
   getListCommentCount(listId: string): Promise<number>;
 
   // Public lists
-  getPublicLists(options: { sort?: "popular" | "recent"; page?: number; limit?: number }): Promise<ListWithMeta[]>;
+  getPublicLists(options: { sort?: "popular" | "recent"; page?: number; limit?: number; tag?: string }): Promise<ListWithMeta[]>;
+  getPublicListsPopularThisWeek(limit?: number): Promise<ListWithMeta[]>;
+
+  // Fork
+  forkList(ownerId: string, sourceListId: string, name?: string): Promise<List>;
+
+  // Share token
+  generateShareToken(listId: string, ownerId: string): Promise<string>;
+  getListByShareToken(token: string): Promise<List | undefined>;
+
+  // User list stats
+  getUserListStats(userId: string): Promise<{ listCount: number; totalItems: number; likesReceived: number }>;
 
   // Collaborators
   getListCollaborators(listId: string): Promise<(ListCollaborator & { user: UserStub })[]>;
@@ -238,9 +274,11 @@ export interface IStorage {
   createTierList(ownerId: string, data: { name: string; description?: string; visibility?: string; tags?: string[] }): Promise<TierList>;
   getTierList(id: string): Promise<TierList | undefined>;
   getUserTierLists(userId: string): Promise<TierListWithMeta[]>;
-  updateTierList(id: string, data: Partial<Pick<TierList, "name" | "description" | "visibility" | "tags">>): Promise<TierList>;
+  updateTierList(id: string, data: Partial<Pick<TierList, "name" | "description" | "visibility" | "tags" | "isTemplate" | "sourceTierListId">>): Promise<TierList>;
   deleteTierList(id: string): Promise<void>;
   getTierListDetail(id: string, appUserId?: string | null): Promise<TierListDetail | undefined>;
+  createTierListFromTemplate(ownerId: string, sourceTierListId: string, name?: string): Promise<TierList>;
+  getTierListCommunityAggregate(templateId: string): Promise<TierListCommunityAggregate | null>;
 
   // Tier list tiers
   createTier(tierListId: string, data: { label: string; color?: string; position?: number }): Promise<TierListTier>;
@@ -281,6 +319,20 @@ export interface IStorage {
   getTierListInvitations(tierListId: string): Promise<(TierListInvitation & { invitedUser: UserStub })[]>;
   respondToTierListInvitation(id: string, userId: string, status: "accepted" | "declined"): Promise<TierListInvitation>;
   getPendingTierListInvitationCount(userId: string): Promise<number>;
+
+  // Tier list fork (any public tier list)
+  forkTierList(ownerId: string, sourceTierListId: string, name?: string): Promise<TierList>;
+
+  // Tier list compare
+  getTierListCompareData(idA: string, idB: string): Promise<{ a: TierListDetail; b: TierListDetail; mediaMap: Record<string, { aPlacement: string | null; bPlacement: string | null }> } | null>;
+
+  // Tier list item reactions
+  reactToTierListItem(userId: string, tierListItemId: string, reaction: "agree" | "disagree"): Promise<void>;
+  unreactToTierListItem(userId: string, tierListItemId: string): Promise<void>;
+  getTierListItemReactions(tierListId: string, userId?: string | null): Promise<TierListItemReactionCounts[]>;
+
+  // Pre-built templates
+  seedPrebuiltTemplatesIfEmpty(): Promise<void>;
 
   // Preset list social (presetListId is slug e.g. "imdb-top-250")
   likePresetList(userId: string, presetListId: string): Promise<void>;
@@ -808,6 +860,7 @@ class DatabaseStorage implements IStorage {
     const keys: (keyof Omit<ProfileSettings, "userId">)[] = [
       "bannerUrl", "bannerPosition", "themeAccent", "themeCustomColor",
       "layoutOrder", "avatarFrameId", "pronouns", "aboutMe", "showBadges",
+      "profileCustomHtml", "profileCustomCss",
     ];
     for (const k of keys) {
       if (data[k] !== undefined) setData[k] = data[k];
@@ -822,6 +875,8 @@ class DatabaseStorage implements IStorage {
       pronouns: null,
       aboutMe: null,
       showBadges: true,
+      profileCustomHtml: null,
+      profileCustomCss: null,
     };
     if (Object.keys(setData).length === 0) {
       await db.insert(profileSettings).values({ userId, ...defaults }).onConflictDoNothing();
@@ -1363,7 +1418,7 @@ class DatabaseStorage implements IStorage {
     return new Set(rows.map((r) => r.externalId));
   }
 
-  async getPublicLists(options: { sort?: "popular" | "recent"; page?: number; limit?: number }): Promise<ListWithMeta[]> {
+  async getPublicLists(options: { sort?: "popular" | "recent"; page?: number; limit?: number; tag?: string }): Promise<ListWithMeta[]> {
     const page = options.page ?? 0;
     const limit = Math.min(options.limit ?? 24, 50);
     const offset = page * limit;
@@ -1377,12 +1432,17 @@ class DatabaseStorage implements IStorage {
       likeCount: sql<number>`(select count(*) from list_likes where list_likes.list_id = ${lists.id})::int`,
     };
 
+    const whereConditions = [eq(lists.visibility, "public")];
+    if (options.tag) {
+      whereConditions.push(sql`${lists.tags} @> ARRAY[${options.tag}]::text[]`);
+    }
+
     const rows = sortMode === "popular"
       ? await db
           .select(selectFields)
           .from(lists)
           .innerJoin(users, eq(lists.ownerId, users.id))
-          .where(eq(lists.visibility, "public"))
+          .where(and(...whereConditions))
           .orderBy(desc(sql`(select count(*) from list_likes where list_likes.list_id = lists.id)`), desc(lists.createdAt))
           .limit(limit)
           .offset(offset)
@@ -1390,7 +1450,7 @@ class DatabaseStorage implements IStorage {
           .select(selectFields)
           .from(lists)
           .innerJoin(users, eq(lists.ownerId, users.id))
-          .where(eq(lists.visibility, "public"))
+          .where(and(...whereConditions))
           .orderBy(desc(lists.createdAt))
           .limit(limit)
           .offset(offset);
@@ -1415,6 +1475,115 @@ class DatabaseStorage implements IStorage {
       commentCount: commentCounts[i],
       coverUrls: coverUrlsByList[l.id] ?? [],
     }));
+  }
+
+  async getPublicListsPopularThisWeek(limit: number = 10): Promise<ListWithMeta[]> {
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const selectFields = {
+      list: lists,
+      owner: { id: users.id, username: users.username, displayName: users.displayName, avatarUrl: users.avatarUrl },
+      itemCount: sql<number>`(select count(*) from list_items where list_items.list_id = ${lists.id})::int`,
+      collaboratorCount: sql<number>`(select count(*) from list_collaborators where list_collaborators.list_id = ${lists.id})::int`,
+      likeCount: sql<number>`(select count(*) from list_likes where list_likes.list_id = ${lists.id})::int`,
+    };
+
+    const rows = await db
+      .select(selectFields)
+      .from(lists)
+      .innerJoin(users, eq(lists.ownerId, users.id))
+      .where(and(eq(lists.visibility, "public"), sql`${lists.createdAt} >= ${oneWeekAgo}`))
+      .orderBy(desc(sql`(select count(*) from list_likes where list_likes.list_id = lists.id)`), desc(lists.createdAt))
+      .limit(limit);
+
+    const result: ListWithMeta[] = rows.map((r) => ({
+      ...r.list,
+      owner: r.owner as UserStub,
+      itemCount: r.itemCount,
+      collaboratorCount: r.collaboratorCount,
+      isCollaborator: false,
+      likeCount: (r as { likeCount?: number }).likeCount ?? 0,
+    }));
+
+    const listIds = result.map((l) => l.id);
+    if (listIds.length === 0) return result;
+
+    const coverUrlsByList = await this.getListCoverUrls(listIds);
+    return result.map((l) => ({
+      ...l,
+      coverUrls: coverUrlsByList[l.id] ?? [],
+    }));
+  }
+
+  async forkList(ownerId: string, sourceListId: string, name?: string): Promise<List> {
+    const source = await this.getList(sourceListId);
+    if (!source) throw new Error("Source list not found");
+    if (source.visibility !== "public") throw new Error("Cannot fork a private list");
+
+    const [forked] = await db.insert(lists).values({
+      ownerId,
+      name: name || `${source.name} (fork)`,
+      description: source.description ?? "",
+      visibility: "private",
+      isRanked: source.isRanked,
+      tags: source.tags ?? [],
+      sourceListId,
+    }).returning();
+
+    // Copy items preserving order
+    const items = await this.getListItems(sourceListId);
+    for (const item of items) {
+      await db.insert(listItems).values({
+        listId: forked.id,
+        mediaId: item.mediaId,
+        addedByUserId: ownerId,
+        position: item.position,
+        note: item.note,
+      });
+    }
+
+    return forked;
+  }
+
+  async generateShareToken(listId: string, ownerId: string): Promise<string> {
+    const list = await this.getList(listId);
+    if (!list) throw new Error("List not found");
+    if (list.ownerId !== ownerId) throw new Error("Forbidden");
+    if (list.shareToken) return list.shareToken;
+
+    const { randomBytes } = await import("crypto");
+    const token = randomBytes(32).toString("hex");
+    await db.update(lists).set({ shareToken: token }).where(eq(lists.id, listId));
+    return token;
+  }
+
+  async getListByShareToken(token: string): Promise<List | undefined> {
+    const [list] = await db.select().from(lists).where(eq(lists.shareToken, token));
+    return list;
+  }
+
+  async getUserListStats(userId: string): Promise<{ listCount: number; totalItems: number; likesReceived: number }> {
+    const [listCountResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(lists)
+      .where(eq(lists.ownerId, userId));
+
+    const [totalItemsResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(listItems)
+      .innerJoin(lists, eq(listItems.listId, lists.id))
+      .where(eq(lists.ownerId, userId));
+
+    const [likesResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(listLikes)
+      .innerJoin(lists, eq(listLikes.listId, lists.id))
+      .where(eq(lists.ownerId, userId));
+
+    return {
+      listCount: listCountResult?.count ?? 0,
+      totalItems: totalItemsResult?.count ?? 0,
+      likesReceived: likesResult?.count ?? 0,
+    };
   }
 
   async getListItems(listId: string): Promise<ListItemWithDetails[]> {
@@ -1553,13 +1722,15 @@ class DatabaseStorage implements IStorage {
   ];
 
   async createTierList(ownerId: string, data: { name: string; description?: string; visibility?: string; tags?: string[] }): Promise<TierList> {
-    const [list] = await db.insert(tierLists).values({
+    const result = await db.insert(tierLists).values({
       ownerId,
       name: data.name,
       description: data.description ?? "",
       visibility: data.visibility ?? "private",
       tags: data.tags ?? [],
     }).returning();
+    const list = Array.isArray(result) ? result[0] : undefined;
+    if (!list) throw new Error("Failed to create tier list");
     await this.ensureDefaultTiers(list.id);
     return list;
   }
@@ -1823,10 +1994,334 @@ class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async updateTierList(id: string, data: Partial<Pick<TierList, "name" | "description" | "visibility" | "tags">>): Promise<TierList> {
+  async updateTierList(id: string, data: Partial<Pick<TierList, "name" | "description" | "visibility" | "tags" | "isTemplate" | "sourceTierListId">>): Promise<TierList> {
     const [updated] = await db.update(tierLists).set(data).where(eq(tierLists.id, id)).returning();
     if (!updated) throw new Error("Tier list not found");
     return updated;
+  }
+
+  async createTierListFromTemplate(ownerId: string, sourceTierListId: string, name?: string): Promise<TierList> {
+    const source = await this.getTierList(sourceTierListId);
+    if (!source) throw new Error("Tier list not found");
+    if (source.visibility !== "public") throw new Error("Template is not public");
+    if (!source.isTemplate) throw new Error("This list is not published as a template");
+
+    const newName = name?.trim() ? name.trim().slice(0, 100) : `Copy of ${source.name}`.slice(0, 100);
+    const insertResult = await db
+      .insert(tierLists)
+      .values({
+        ownerId,
+        name: newName,
+        description: source.description ?? "",
+        visibility: "private",
+        tags: source.tags ?? [],
+        sourceTierListId: source.id,
+      })
+      .returning();
+    const newList = Array.isArray(insertResult) ? insertResult[0] : undefined;
+    if (!newList) throw new Error("Failed to create tier list");
+    const sourceTiers = await db
+      .select()
+      .from(tierListTiers)
+      .where(eq(tierListTiers.tierListId, sourceTierListId))
+      .orderBy(asc(tierListTiers.position));
+    for (let i = 0; i < sourceTiers.length; i++) {
+      await this.createTier(newList.id, {
+        label: sourceTiers[i].label,
+        color: sourceTiers[i].color,
+        position: i,
+      });
+    }
+    const sourceItems = await this.getTierListItems(sourceTierListId);
+    const orderedItems = sourceItems.toSorted((a, b) => {
+      const aTierPos = sourceTiers.findIndex((t) => t.id === a.tierId);
+      const bTierPos = sourceTiers.findIndex((t) => t.id === b.tierId);
+      const aPos = aTierPos >= 0 ? aTierPos * 10000 + a.position : 100000 + a.position;
+      const bPos = bTierPos >= 0 ? bTierPos * 10000 + b.position : 100000 + b.position;
+      return aPos - bPos;
+    });
+    for (let i = 0; i < orderedItems.length; i++) {
+      await this.addTierListItem(newList.id, orderedItems[i].mediaId, ownerId, null, i, orderedItems[i].note ?? undefined);
+    }
+    return newList;
+  }
+
+  async getTierListCommunityAggregate(templateId: string): Promise<TierListCommunityAggregate | null> {
+    const template = await this.getTierList(templateId);
+    if (!template || !template.isTemplate || template.visibility !== "public") return null;
+
+    const templateTiers = await db
+      .select()
+      .from(tierListTiers)
+      .where(eq(tierListTiers.tierListId, templateId))
+      .orderBy(asc(tierListTiers.position));
+    const tierLabels = templateTiers.map((t) => t.label);
+    const maxPos = tierLabels.length;
+    if (maxPos === 0) {
+      return { templateId, forkCount: 0, tierLabels: [], byMedia: [] };
+    }
+
+    const forks = await db
+      .select({ id: tierLists.id })
+      .from(tierLists)
+      .where(and(eq(tierLists.sourceTierListId, templateId), eq(tierLists.visibility, "public")));
+
+    const placementCounts = new Map<string, Map<number, number>>();
+
+    for (const fork of forks) {
+      const forkTiers = await db
+        .select({ id: tierListTiers.id, position: tierListTiers.position })
+        .from(tierListTiers)
+        .where(eq(tierListTiers.tierListId, fork.id))
+        .orderBy(asc(tierListTiers.position));
+      const tierIdToPos = new Map<string, number>();
+      forkTiers.forEach((t, i) => {
+        if (i < maxPos) tierIdToPos.set(t.id, i);
+      });
+
+      const rows = await db
+        .select({ mediaId: tierListItems.mediaId, tierId: tierListItems.tierId })
+        .from(tierListItems)
+        .where(and(eq(tierListItems.tierListId, fork.id), isNotNull(tierListItems.tierId)));
+
+      for (const row of rows) {
+        const pos = row.tierId ? tierIdToPos.get(row.tierId) : undefined;
+        if (pos === undefined) continue;
+        let byMedia = placementCounts.get(row.mediaId);
+        if (!byMedia) {
+          byMedia = new Map<number, number>();
+          placementCounts.set(row.mediaId, byMedia);
+        }
+        byMedia.set(pos, (byMedia.get(pos) ?? 0) + 1);
+      }
+    }
+
+    const mediaIds = Array.from(placementCounts.keys());
+    const mediaRows =
+      mediaIds.length > 0
+        ? await db.select({ id: media.id, title: media.title }).from(media).where(inArray(media.id, mediaIds))
+        : [];
+    const mediaById = new Map(mediaRows.map((m) => [m.id, m.title ?? ""]));
+
+    const byMedia: TierListCommunityAggregateByMedia[] = [];
+    for (const mediaId of mediaIds) {
+      const posCounts = placementCounts.get(mediaId)!;
+      const totalRanked = Array.from(posCounts.values()).reduce((a, b) => a + b, 0);
+      let bestPos = 0;
+      let bestCount = 0;
+      posCounts.forEach((c, pos) => {
+        if (c > bestCount) {
+          bestCount = c;
+          bestPos = pos;
+        }
+      });
+      const percent = totalRanked > 0 ? Math.round((100 * bestCount) / totalRanked) : 0;
+      byMedia.push({
+        mediaId,
+        mediaTitle: mediaById.get(mediaId) ?? "",
+        tierLabel: tierLabels[bestPos] ?? "",
+        tierPosition: bestPos,
+        percent,
+        totalRanked,
+      });
+    }
+
+    byMedia.sort((a, b) => a.tierPosition - b.tierPosition || a.mediaTitle.localeCompare(b.mediaTitle));
+
+    return {
+      templateId,
+      forkCount: forks.length,
+      tierLabels,
+      byMedia,
+    };
+  }
+
+  async forkTierList(ownerId: string, sourceTierListId: string, name?: string): Promise<TierList> {
+    const source = await this.getTierList(sourceTierListId);
+    if (!source) throw new Error("Tier list not found");
+    if (source.visibility !== "public") throw new Error("Cannot fork a private tier list");
+
+    const newName = name?.trim() ? name.trim().slice(0, 100) : `${source.name} (my version)`.slice(0, 100);
+    const insertResult = await db
+      .insert(tierLists)
+      .values({
+        ownerId,
+        name: newName,
+        description: source.description ?? "",
+        visibility: "private",
+        tags: source.tags ?? [],
+        sourceTierListId: source.sourceTierListId ?? source.id,
+      })
+      .returning();
+    const newList = Array.isArray(insertResult) ? insertResult[0] : undefined;
+    if (!newList) throw new Error("Failed to create tier list");
+
+    const sourceTiers = await db
+      .select()
+      .from(tierListTiers)
+      .where(eq(tierListTiers.tierListId, sourceTierListId))
+      .orderBy(asc(tierListTiers.position));
+    const tierIdMap = new Map<string, string>();
+    for (let i = 0; i < sourceTiers.length; i++) {
+      const newTier = await this.createTier(newList.id, {
+        label: sourceTiers[i].label,
+        color: sourceTiers[i].color,
+        position: i,
+      });
+      tierIdMap.set(sourceTiers[i].id, newTier.id);
+    }
+
+    const sourceItems = await this.getTierListItems(sourceTierListId);
+    for (const item of sourceItems) {
+      await this.addTierListItem(
+        newList.id,
+        item.mediaId,
+        ownerId,
+        null,
+        item.position,
+        item.note ?? undefined,
+      );
+    }
+    return newList;
+  }
+
+  async getTierListCompareData(idA: string, idB: string): Promise<{ a: any; b: any; mediaMap: Record<string, { aPlacement: string | null; bPlacement: string | null }> } | null> {
+    const [detailA, detailB] = await Promise.all([
+      this.getTierListDetail(idA),
+      this.getTierListDetail(idB),
+    ]);
+    if (!detailA || !detailB) return null;
+
+    const getPlacementMap = (detail: NonNullable<typeof detailA>) => {
+      const map = new Map<string, string | null>();
+      for (const tier of detail.tiers) {
+        for (const item of tier.items) {
+          map.set(item.mediaId, tier.label);
+        }
+      }
+      for (const item of detail.unassignedItems) {
+        map.set(item.mediaId, null);
+      }
+      return map;
+    };
+
+    const placementsA = getPlacementMap(detailA);
+    const placementsB = getPlacementMap(detailB);
+    const allMediaIds = new Set([...Array.from(placementsA.keys()), ...Array.from(placementsB.keys())]);
+
+    const mediaMap: Record<string, { aPlacement: string | null; bPlacement: string | null }> = {};
+    for (const mediaId of Array.from(allMediaIds)) {
+      mediaMap[mediaId] = {
+        aPlacement: placementsA.get(mediaId) ?? null,
+        bPlacement: placementsB.get(mediaId) ?? null,
+      };
+    }
+
+    return { a: detailA, b: detailB, mediaMap };
+  }
+
+  async reactToTierListItem(userId: string, tierListItemId: string, reaction: "agree" | "disagree"): Promise<void> {
+    await db
+      .insert(tierListItemReactions)
+      .values({ userId, tierListItemId, reaction })
+      .onConflictDoUpdate({
+        target: [tierListItemReactions.userId, tierListItemReactions.tierListItemId],
+        set: { reaction, createdAt: new Date() },
+      });
+  }
+
+  async unreactToTierListItem(userId: string, tierListItemId: string): Promise<void> {
+    await db
+      .delete(tierListItemReactions)
+      .where(and(eq(tierListItemReactions.userId, userId), eq(tierListItemReactions.tierListItemId, tierListItemId)));
+  }
+
+  async getTierListItemReactions(tierListId: string, userId?: string | null): Promise<TierListItemReactionCounts[]> {
+    const items = await db
+      .select({ id: tierListItems.id })
+      .from(tierListItems)
+      .where(eq(tierListItems.tierListId, tierListId));
+    if (items.length === 0) return [];
+
+    const itemIds = items.map((i) => i.id);
+    const reactions = await db
+      .select({
+        tierListItemId: tierListItemReactions.tierListItemId,
+        reaction: tierListItemReactions.reaction,
+        userId: tierListItemReactions.userId,
+      })
+      .from(tierListItemReactions)
+      .where(inArray(tierListItemReactions.tierListItemId, itemIds));
+
+    const grouped = new Map<string, { agree: number; disagree: number; userReaction: "agree" | "disagree" | null }>();
+    for (const r of reactions) {
+      if (!grouped.has(r.tierListItemId)) {
+        grouped.set(r.tierListItemId, { agree: 0, disagree: 0, userReaction: null });
+      }
+      const g = grouped.get(r.tierListItemId)!;
+      if (r.reaction === "agree") g.agree++;
+      else g.disagree++;
+      if (userId && r.userId === userId) g.userReaction = r.reaction as "agree" | "disagree";
+    }
+
+    return Array.from(grouped.entries()).map(([itemId, counts]) => ({
+      itemId,
+      agreeCount: counts.agree,
+      disagreeCount: counts.disagree,
+      userReaction: counts.userReaction,
+    }));
+  }
+
+  async seedPrebuiltTemplatesIfEmpty(): Promise<void> {
+    const existing = await db
+      .select({ id: tierLists.id })
+      .from(tierLists)
+      .where(and(eq(tierLists.isTemplate, true), eq(tierLists.visibility, "public")))
+      .limit(1);
+    if (existing.length > 0) return;
+
+    const systemUser = await this.getOrCreateAppUser("system-templates", {
+      name: "Media Log",
+      email: "templates@medialog.app",
+    });
+
+    const templates = [
+      {
+        name: "Top 50 Movies of All Time",
+        description: "Rank the greatest films ever made. From classics to modern masterpieces.",
+        tags: ["movies", "classic", "all-time"],
+      },
+      {
+        name: "Best Anime Series",
+        description: "Rank your favorite anime from S-tier to D-tier. Settle the eternal debates.",
+        tags: ["anime", "series", "ranking"],
+      },
+      {
+        name: "2024 Games Tier List",
+        description: "Rank the standout games of 2024. What deserves S-tier?",
+        tags: ["games", "2024", "ranking"],
+      },
+      {
+        name: "Greatest TV Shows",
+        description: "From Breaking Bad to The Wire — rank the best TV shows of all time.",
+        tags: ["tv", "series", "all-time"],
+      },
+      {
+        name: "Best Albums of the Decade",
+        description: "Rank the most influential and beloved albums from the past decade.",
+        tags: ["music", "albums", "decade"],
+      },
+    ];
+
+    for (const tmpl of templates) {
+      const list = await this.createTierList(systemUser.id, {
+        name: tmpl.name,
+        description: tmpl.description,
+        visibility: "public",
+        tags: tmpl.tags,
+      });
+      await this.updateTierList(list.id, { isTemplate: true });
+    }
   }
 
   async deleteTierList(id: string): Promise<void> {

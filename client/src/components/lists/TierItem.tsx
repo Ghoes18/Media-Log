@@ -8,11 +8,13 @@ interface TierItemProps {
   coverGradient: string;
   title?: string;
   className?: string;
+  disabled?: boolean;
 }
 
-export function TierItem({ id, coverUrl, coverGradient, title, className }: TierItemProps) {
+export function TierItem({ id, coverUrl, coverGradient, title, className, disabled = false }: TierItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
+    disabled,
   });
 
   const style = {
@@ -24,12 +26,14 @@ export function TierItem({ id, coverUrl, coverGradient, title, className }: Tier
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
+      {...(disabled ? {} : attributes)}
+      {...(disabled ? {} : listeners)}
+      title={title}
       className={cn(
-        "shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden cursor-grab active:cursor-grabbing touch-none",
-        "ring-2 ring-transparent hover:ring-primary/50 transition-all",
-        isDragging && "opacity-80 scale-105 z-50 ring-primary shadow-lg",
+        "group relative shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden touch-pan-y",
+        "ring-2 ring-transparent hover:ring-primary/60 transition-all duration-150",
+        disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing",
+        isDragging && "opacity-0",
         className,
       )}
     >
@@ -37,6 +41,12 @@ export function TierItem({ id, coverUrl, coverGradient, title, className }: Tier
         <img src={coverUrl} alt={title ?? ""} className="w-full h-full object-cover" loading="lazy" />
       ) : (
         <div className={cn("w-full h-full bg-gradient-to-br", coverGradient || "from-slate-700 to-slate-900")} />
+      )}
+      {/* Title overlay on hover */}
+      {title && (
+        <div className="absolute inset-x-0 bottom-0 bg-black/70 px-1 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none">
+          <p className="text-[9px] leading-tight text-white truncate text-center font-medium">{title}</p>
+        </div>
       )}
     </div>
   );
